@@ -1,0 +1,16 @@
+[package]
+name = "lieweb"
+version = "0.1.0"
+authors = ["zzzdong <kuwater@163.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0"
+thiserror = "1.0"
+http = "0.2"
+hyper = { git="https://github.com/hyperium/hyper.git" }
+
+# [dev-dependencies]
+tokio = { version="0.2", features=["full"] }
