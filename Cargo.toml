@@ -10,7 +10,7 @@ edition = "2018"
 anyhow = "1.0"
 thiserror = "1.0"
 http = "0.2"
-hyper = { git="https://github.com/hyperium/hyper.git" }
+hyper = "0.13"
 
-# [dev-dependencies]
+[dev-dependencies]
 tokio = { version="0.2", features=["full"] }

@@ -1,9 +1,16 @@
 use std::collections::HashMap;
+use std::future::Future;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{server::conn::AddrStream, Server};
+
+pub mod media_types {
+    pub const TEXT_HTML: &str = "text/html; charset=utf-8";
+    pub const JSON: &str = "application/json; charset=utf-8";
+}
 
 #[derive(thiserror::Error, Debug)]
 pub enum LieError {
@@ -13,12 +20,34 @@ pub enum LieError {
     IOError(#[from] std::io::Error),
 }
 
+pub type HyperRequest = hyper::Request<hyper::Body>;
+
 #[derive(Debug)]
 pub struct Request<State> {
-    inner: hyper::Request<hyper::Body>,
+    inner: HyperRequest,
     state: Arc<State>,
     remote_addr: SocketAddr,
 }
+
+impl<State> Request<State> {
+    pub fn new(inner: HyperRequest, state: Arc<State>, remote_addr: SocketAddr) -> Self {
+        Request {
+            inner,
+            state,
+            remote_addr,
+        }
+    }
+
+    pub fn state(&self) -> &State {
+        &self.state
+    }
+
+    pub fn remote_addr(&self) -> SocketAddr {
+        self.remote_addr
+    }
+}
+
+pub type HyperResponse = hyper::Response<hyper::Body>;
 
 pub trait IntoResponse<E>: Send + Sized
 where
@@ -28,7 +57,33 @@ where
     fn into_response(self) -> Result<Response, E>;
 }
 
-pub type Response = hyper::Response<hyper::Body>;
+pub struct Response {
+    inner: HyperResponse,
+}
+
+impl Response {
+    pub fn with_html(html: impl Into<String>) -> Response {
+        Response {
+            inner: hyper::Response::builder()
+                .header(hyper::header::CONTENT_TYPE, media_types::TEXT_HTML)
+                .body(hyper::Body::from(html.into()))
+                .unwrap(),
+        }
+    }
+}
+
+impl From<Response> for HyperResponse {
+    fn from(resp: Response) -> HyperResponse {
+        let Response { inner, .. } = resp;
+        inner
+    }
+}
+
+impl From<HyperResponse> for Response {
+    fn from(resp: HyperResponse) -> Response {
+        Response { inner: resp }
+    }
+}
 
 impl<E> IntoResponse<E> for Result<Response, E>
 where
@@ -45,11 +100,9 @@ impl IntoResponse<std::io::Error> for Response {
     }
 }
 
-use std::future::Future;
-use std::pin::Pin;
-pub(crate) type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+pub(crate) type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send + 'static>>;
 pub(crate) type DynEndpoint<State, E> =
-    dyn (Fn(Request<State>) -> BoxFuture<'static, Result<Response, E>>) + 'static + Send + Sync;
+    dyn (Fn(Request<State>) -> BoxFuture<Response, E>) + 'static + Send + Sync;
 
 pub trait Endpoint<State, E>: Send + Sync + 'static
 where
@@ -69,7 +122,7 @@ where
     Fut: Future + Send + 'static,
     Fut::Output: IntoResponse<E>,
 {
-    type Fut = BoxFuture<'static, Result<Response, E>>;
+    type Fut = BoxFuture<Response, E>;
     fn call(&self, cx: Request<State>) -> Self::Fut {
         let fut = (self)(cx);
         Box::pin(async move { fut.await.into_response() })
@@ -132,7 +185,7 @@ where
                             None => Self::handle_not_found(request),
                         };
 
-                        Ok::<_, LieError>(resp)
+                        Ok::<_, LieError>(resp.into())
                     }
                 }))
             }
@@ -146,58 +199,20 @@ where
     }
 
     fn handle_not_found(_request: Request<State>) -> Response {
-        hyper::Response::builder()
-            .status(404)
-            .body(hyper::Body::from("Not Found"))
-            .unwrap()
+        Response {
+            inner: hyper::Response::builder()
+                .status(404)
+                .body(hyper::Body::from("Not Found"))
+                .unwrap(),
+        }
     }
 
     fn handle_error(e: impl std::error::Error) -> Response {
-        hyper::Response::builder()
-            .status(500)
-            .body(hyper::Body::from(format!("{:?}", e)))
-            .unwrap()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::{Arc, Mutex};
-
-    type State = Arc<Mutex<u64>>;
-
-    async fn request_handler(req: Request<State>) -> Result<Response, std::io::Error> {
-        let value;
-
-        {
-            let mut counter = req.state.lock().unwrap();
-            value = *counter;
-            *counter += 1;
+        Response {
+            inner: hyper::Response::builder()
+                .status(500)
+                .body(hyper::Body::from(format!("{:?}", e)))
+                .unwrap(),
         }
-
-        let resp = hyper::Response::new(hyper::Body::from(format!(
-            "got request#{} from {:?}",
-            value, req.remote_addr
-        )));
-
-        Ok(resp)
-    }
-
-    #[tokio::test]
-    async fn hello() {
-        let addr = "127.0.0.1:8000".parse().unwrap();
-
-        let state: Arc<Mutex<u64>> = Arc::new(Mutex::new(0));
-
-        let mut app = App::with_state(state);
-
-        app.register("/", request_handler);
-
-        app.register("/hello", |_req| {
-            async move { hyper::Response::new(hyper::Body::from("hello, world!")) }
-        });
-
-        app.run(&addr).await.unwrap();
     }
 }
