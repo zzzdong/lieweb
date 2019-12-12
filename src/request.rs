@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-pub type HyperRequest = hyper::Request<hyper::Body>;
+pub(crate) type HyperRequest = hyper::Request<hyper::Body>;
 
 #[derive(Debug)]
 pub struct Request<State> {

@@ -1,6 +1,6 @@
 use crate::LieError;
 
-pub type HyperResponse = hyper::Response<hyper::Body>;
+pub(crate) type HyperResponse = hyper::Response<hyper::Body>;
 
 pub trait IntoResponse<E>: Send + Sized
 where
@@ -17,6 +17,7 @@ pub struct Response {
 impl Response {
     pub fn write_text(html: impl Into<String>) -> Result<Response, LieError> {
         let resp = hyper::Response::builder()
+            .header(hyper::header::SERVER, crate::server::SERVER_ID.to_string())
             .header(
                 hyper::header::CONTENT_TYPE,
                 mime::TEXT_PLAIN_UTF_8.to_string(),
@@ -28,6 +29,7 @@ impl Response {
 
     pub fn write_html(html: impl Into<String>) -> Result<Response, LieError> {
         let resp = hyper::Response::builder()
+            .header(hyper::header::SERVER, crate::server::SERVER_ID.to_string())
             .header(
                 hyper::header::CONTENT_TYPE,
                 mime::TEXT_HTML_UTF_8.to_string(),
@@ -41,6 +43,7 @@ impl Response {
         let json = serde_json::to_string(&json)?;
 
         let resp = hyper::Response::builder()
+            .header(hyper::header::SERVER, crate::server::SERVER_ID.to_string())
             .header(
                 hyper::header::CONTENT_TYPE,
                 mime::APPLICATION_JSON.to_string(),

@@ -59,5 +59,5 @@ async fn main() {
         }
     });
 
-    app.run(&addr).await.unwrap();
+    app.run2(&addr).await.unwrap();
 }

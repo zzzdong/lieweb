@@ -1,9 +1,8 @@
 use std::future::Future;
-use std::pin::Pin;
 
+use crate::utils::BoxFuture;
 use crate::{IntoResponse, Request, Response};
 
-pub(crate) type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send + 'static>>;
 pub(crate) type DynEndpoint<State, E> =
     dyn (Fn(Request<State>) -> BoxFuture<Response, E>) + 'static + Send + Sync;
 
