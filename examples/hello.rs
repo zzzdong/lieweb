@@ -1,12 +1,19 @@
 use std::sync::{Arc, Mutex};
 
-use lieweb::{App, Request, Response};
+use lieweb::{App, LieError, Request, Response};
 
 const DEFAULT_ADDR: &'static str = "127.0.0.1:5000";
 
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct HelloMessage {
+    message: String,
+}
+
 type State = Arc<Mutex<u64>>;
 
-async fn request_handler(req: Request<State>) -> Result<Response, std::io::Error> {
+async fn request_handler(req: Request<State>) -> Result<Response, LieError> {
     let value;
 
     {
@@ -15,13 +22,11 @@ async fn request_handler(req: Request<State>) -> Result<Response, std::io::Error
         *counter += 1;
     }
 
-    let resp = Response::with_html(format!(
+    Response::write_html(format!(
         "got request#{} from {:?}",
         value,
         req.remote_addr()
-    ));
-
-    Ok(resp.into())
+    ))
 }
 
 #[tokio::main]
@@ -39,10 +44,19 @@ async fn main() {
 
     let mut app = App::with_state(state);
 
-    app.register("/", request_handler);
+    app.register(http::Method::GET, "/", request_handler);
 
-    app.register("/hello", |_req| {
-        async move { Response::with_html("hello, world!") }
+    app.register(http::Method::GET, "/hello", |_req| {
+        async move { Response::write_html("hello, world!") }
+    });
+
+    app.register(http::Method::GET, "/json", |_req| {
+        async move {
+            let msg = HelloMessage {
+                message: "hello, world!".to_owned(),
+            };
+            Response::write_json(msg)
+        }
     });
 
     app.run(&addr).await.unwrap();
