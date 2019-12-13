@@ -6,13 +6,14 @@ use futures_util::future;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{server::conn::AddrStream, Server};
 use lazy_static::lazy_static;
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::endpoint::Endpoint;
-use crate::request::HyperRequest;
+use crate::request::{HyperRequest, Request};
+use crate::response::{HyperResponse, Response};
 use crate::router::Router;
 use crate::utils::BoxFuture;
 use crate::LieError;
-use crate::{Request, Response};
 
 lazy_static! {
     pub static ref SERVER_ID: String = format!("Lieweb {}", env!("CARGO_PKG_VERSION"));
@@ -43,7 +44,11 @@ where
         self.router.register(method, path, ep)
     }
 
-    pub async fn run(self, addr: &SocketAddr) -> Result<(), crate::LieError> {
+    pub fn set_not_found(&mut self, ep: impl Endpoint<State, E>) {
+        self.router.set_not_found(ep)
+    }
+
+    pub async fn run(self, addr: &SocketAddr) -> Result<(), LieError> {
         let App { state, router } = self;
 
         let state = Arc::new(state);
@@ -62,7 +67,7 @@ where
                     let path = req.uri().path().to_string();
                     let method = req.method().clone();
 
-                    let request = Request::new(req, state.clone(), remote_addr);
+                    let request = Request::new(req, state.clone(), Some(remote_addr));
 
                     let router = router.clone();
 
@@ -70,7 +75,7 @@ where
                         let handler = router.find(&method, &path);
                         let resp = match handler(request).await {
                             Ok(ret) => ret,
-                            Err(e) => Self::handle_error(e),
+                            Err(e) => Self::handle_error(e).await,
                         };
 
                         Ok::<_, LieError>(resp.into())
@@ -86,16 +91,7 @@ where
         Ok(())
     }
 
-    fn handle_error(e: impl std::error::Error) -> Response {
-        Response {
-            inner: hyper::Response::builder()
-                .status(500)
-                .body(hyper::Body::from(format!("{:?}", e)))
-                .unwrap(),
-        }
-    }
-
-    pub async fn run2(self, addr: &SocketAddr) -> Result<(), crate::LieError> {
+    pub async fn run2(self, addr: &SocketAddr) -> Result<(), LieError> {
         let App { state, router } = self;
 
         let state = Arc::new(state);
@@ -104,7 +100,7 @@ where
         let svc = Service {
             state,
             router,
-            remote_addr: addr.clone(),
+            remote_addr: None,
         };
 
         let server = Server::bind(&addr).serve(MakeSvc { inner: svc });
@@ -113,12 +109,21 @@ where
 
         Ok(())
     }
+
+    async fn handle_error(e: impl std::error::Error) -> Response {
+        Response {
+            inner: hyper::Response::builder()
+                .status(500)
+                .body(hyper::Body::from(format!("{:?}", e)))
+                .unwrap(),
+        }
+    }
 }
 
 pub struct Service<State, E> {
     state: Arc<State>,
     router: Arc<Router<State, E>>,
-    remote_addr: SocketAddr,
+    remote_addr: Option<SocketAddr>,
 }
 
 impl<State, E> Service<State, E>
@@ -150,12 +155,12 @@ where
     }
 }
 
-impl<State, E> hyper::service::Service<crate::request::HyperRequest> for Service<State, E>
+impl<State, E> hyper::service::Service<HyperRequest> for Service<State, E>
 where
     State: Send + Sync + 'static,
     E: std::error::Error + Send + Sync + 'static,
 {
-    type Response = crate::response::HyperResponse;
+    type Response = HyperResponse;
     type Error = hyper::Error;
     type Future = BoxFuture<Self::Response, Self::Error>;
 
@@ -166,10 +171,9 @@ where
     fn call(&mut self, req: HyperRequest) -> Self::Future {
         let path = req.uri().path().to_string();
         let method = req.method().clone();
+        let router = self.router.clone();
 
         let request = Request::new(req, self.state.clone(), self.remote_addr);
-
-        let router = self.router.clone();
 
         let fut = async move {
             let handler = router.find(&method, &path);
@@ -185,13 +189,13 @@ where
     }
 }
 
-pub trait RemoteAddr {
-    fn remote_addr(&self) -> SocketAddr;
+pub trait Transport: AsyncRead + AsyncWrite {
+    fn remote_addr(&self) -> Option<SocketAddr>;
 }
 
-impl RemoteAddr for &AddrStream {
-    fn remote_addr(&self) -> SocketAddr {
-        (*self).remote_addr()
+impl Transport for AddrStream {
+    fn remote_addr(&self) -> Option<SocketAddr> {
+        Some(self.remote_addr())
     }
 }
 
@@ -199,11 +203,11 @@ pub struct MakeSvc<State, E> {
     inner: Service<State, E>,
 }
 
-impl<T, State, E> hyper::service::Service<T> for MakeSvc<State, E>
+impl<T, State, E> hyper::service::Service<&T> for MakeSvc<State, E>
 where
     State: Send + Sync + 'static,
     E: std::error::Error + Send + Sync + 'static,
-    T: std::fmt::Debug + RemoteAddr,
+    T: std::fmt::Debug + Transport,
 {
     type Response = Service<State, E>;
     type Error = std::io::Error;
@@ -213,9 +217,9 @@ where
         Ok(()).into()
     }
 
-    fn call(&mut self, t: T) -> Self::Future {
+    fn call(&mut self, t: &T) -> Self::Future {
         let mut svc = self.inner.clone();
-        svc.remote_addr = t.remote_addr();
+        svc.remote_addr = Transport::remote_addr(t);
         future::ok(svc)
     }
 }

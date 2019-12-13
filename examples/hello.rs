@@ -22,7 +22,7 @@ async fn request_handler(req: Request<State>) -> Result<Response, LieError> {
         *counter += 1;
     }
 
-    Response::write_html(format!(
+    Response::with_html(format!(
         "got request#{} from {:?}",
         value,
         req.remote_addr()
@@ -47,7 +47,7 @@ async fn main() {
     app.register(http::Method::GET, "/", request_handler);
 
     app.register(http::Method::GET, "/hello", |_req| {
-        async move { Response::write_html("hello, world!") }
+        async move { Response::with_html("hello, world!") }
     });
 
     app.register(http::Method::GET, "/json", |_req| {
@@ -55,7 +55,7 @@ async fn main() {
             let msg = HelloMessage {
                 message: "hello, world!".to_owned(),
             };
-            Response::write_json(msg)
+            Response::with_json(msg)
         }
     });
 

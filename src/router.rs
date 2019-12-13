@@ -7,7 +7,6 @@ type HandlerMap<State, E> = HashMap<String, Box<DynEndpoint<State, E>>>;
 
 pub struct Router<State, E> {
     handlers: HashMap<http::Method, HandlerMap<State, E>>,
-
     handle_not_found: Option<Box<DynEndpoint<State, E>>>,
 }
 

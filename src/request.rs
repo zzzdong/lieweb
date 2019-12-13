@@ -7,11 +7,11 @@ pub(crate) type HyperRequest = hyper::Request<hyper::Body>;
 pub struct Request<State> {
     pub(crate) inner: HyperRequest,
     state: Arc<State>,
-    remote_addr: SocketAddr,
+    remote_addr: Option<SocketAddr>,
 }
 
 impl<State> Request<State> {
-    pub fn new(inner: HyperRequest, state: Arc<State>, remote_addr: SocketAddr) -> Self {
+    pub fn new(inner: HyperRequest, state: Arc<State>, remote_addr: Option<SocketAddr>) -> Self {
         Request {
             inner,
             state,
@@ -23,7 +23,7 @@ impl<State> Request<State> {
         &self.state
     }
 
-    pub fn remote_addr(&self) -> SocketAddr {
+    pub fn remote_addr(&self) -> Option<SocketAddr> {
         self.remote_addr
     }
 }
