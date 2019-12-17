@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use lieweb::{App, LieError, Request, Response};
+use lieweb::{App, Error, Request, Response};
 
 const DEFAULT_ADDR: &'static str = "127.0.0.1:5000";
 
@@ -13,7 +13,7 @@ struct HelloMessage {
 
 type State = Arc<Mutex<u64>>;
 
-async fn request_handler(req: Request<State>) -> Result<Response, LieError> {
+async fn request_handler(req: Request<State>) -> Result<Response, Error> {
     let value;
 
     {
@@ -27,6 +27,10 @@ async fn request_handler(req: Request<State>) -> Result<Response, LieError> {
         value,
         req.remote_addr()
     ))
+}
+
+async fn not_found(_req: Request<State>) -> Response {
+    Response::with_text("not found").unwrap()
 }
 
 #[tokio::main]
@@ -59,5 +63,7 @@ async fn main() {
         }
     });
 
-    app.run2(&addr).await.unwrap();
+    app.set_not_found(not_found);
+
+    app.run(&addr).await.unwrap();
 }

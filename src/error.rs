@@ -1,5 +1,5 @@
 #[derive(thiserror::Error, Debug)]
-pub enum LieError {
+pub enum Error {
     #[error("hyper error")]
     HyperError(#[from] hyper::Error),
     #[error("io error")]

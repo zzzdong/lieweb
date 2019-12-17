@@ -12,23 +12,20 @@ use crate::endpoint::Endpoint;
 use crate::request::{HyperRequest, Request};
 use crate::response::{HyperResponse, Response};
 use crate::router::Router;
-use crate::utils::BoxFuture;
-use crate::LieError;
+use crate::utils::{BoxFuture, StdError};
+use crate::Error;
 
 lazy_static! {
     pub static ref SERVER_ID: String = format!("Lieweb {}", env!("CARGO_PKG_VERSION"));
 }
 
-pub struct App<State, E> {
+pub struct App<State> {
     state: State,
-    router: Router<State, E>,
+    router: Router<State>,
 }
 
-impl<State: Send + Sync + 'static, E: Send + Sync + 'static> App<State, E>
-where
-    E: std::error::Error,
-{
-    pub fn with_state(state: State) -> App<State, E> {
+impl<State: Send + Sync + 'static> App<State> {
+    pub fn with_state(state: State) -> App<State> {
         App {
             state,
             router: Router::new(),
@@ -39,16 +36,16 @@ where
         &mut self,
         method: http::Method,
         path: impl ToString,
-        ep: impl Endpoint<State, E>,
+        ep: impl Endpoint<State>,
     ) {
         self.router.register(method, path, ep)
     }
 
-    pub fn set_not_found(&mut self, ep: impl Endpoint<State, E>) {
+    pub fn set_not_found(&mut self, ep: impl Endpoint<State>) {
         self.router.set_not_found(ep)
     }
 
-    pub async fn run(self, addr: &SocketAddr) -> Result<(), LieError> {
+    pub async fn run(self, addr: &SocketAddr) -> Result<(), Error> {
         let App { state, router } = self;
 
         let state = Arc::new(state);
@@ -63,7 +60,7 @@ where
                 // This is the `Service` that will handle the connection.
                 // `service_fn` is a helper to convert a function that
                 // returns a Response into a `Service`.
-                Ok::<_, LieError>(service_fn(move |req| {
+                Ok::<_, Error>(service_fn(move |req| {
                     let path = req.uri().path().to_string();
                     let method = req.method().clone();
 
@@ -78,7 +75,7 @@ where
                             Err(e) => Self::handle_error(e).await,
                         };
 
-                        Ok::<_, LieError>(resp.into())
+                        Ok::<_, Error>(resp.into())
                     }
                 }))
             }
@@ -91,7 +88,7 @@ where
         Ok(())
     }
 
-    pub async fn run2(self, addr: &SocketAddr) -> Result<(), LieError> {
+    pub async fn run2(self, addr: &SocketAddr) -> Result<(), Error> {
         let App { state, router } = self;
 
         let state = Arc::new(state);
@@ -110,7 +107,7 @@ where
         Ok(())
     }
 
-    async fn handle_error(e: impl std::error::Error) -> Response {
+    async fn handle_error(e: StdError) -> Response {
         Response {
             inner: hyper::Response::builder()
                 .status(500)
@@ -120,18 +117,17 @@ where
     }
 }
 
-pub struct Service<State, E> {
+pub struct Service<State> {
     state: Arc<State>,
-    router: Arc<Router<State, E>>,
+    router: Arc<Router<State>>,
     remote_addr: Option<SocketAddr>,
 }
 
-impl<State, E> Service<State, E>
+impl<State> Service<State>
 where
     State: Send + Sync + 'static,
-    E: std::error::Error + Send + Sync + 'static,
 {
-    fn handle_error(e: impl std::error::Error) -> Response {
+    fn handle_error(e: StdError) -> Response {
         Response {
             inner: hyper::Response::builder()
                 .status(500)
@@ -141,10 +137,9 @@ where
     }
 }
 
-impl<State, E> Clone for Service<State, E>
+impl<State> Clone for Service<State>
 where
     State: Send + Sync + 'static,
-    E: std::error::Error + Send + Sync + 'static,
 {
     fn clone(&self) -> Self {
         Service {
@@ -155,10 +150,9 @@ where
     }
 }
 
-impl<State, E> hyper::service::Service<HyperRequest> for Service<State, E>
+impl<State> hyper::service::Service<HyperRequest> for Service<State>
 where
     State: Send + Sync + 'static,
-    E: std::error::Error + Send + Sync + 'static,
 {
     type Response = HyperResponse;
     type Error = hyper::Error;
@@ -199,17 +193,16 @@ impl Transport for AddrStream {
     }
 }
 
-pub struct MakeSvc<State, E> {
-    inner: Service<State, E>,
+pub struct MakeSvc<State> {
+    inner: Service<State>,
 }
 
-impl<T, State, E> hyper::service::Service<&T> for MakeSvc<State, E>
+impl<T, State> hyper::service::Service<&T> for MakeSvc<State>
 where
     State: Send + Sync + 'static,
-    E: std::error::Error + Send + Sync + 'static,
     T: std::fmt::Debug + Transport,
 {
-    type Response = Service<State, E>;
+    type Response = Service<State>;
     type Error = std::io::Error;
     type Future = future::Ready<Result<Self::Response, Self::Error>>;
 

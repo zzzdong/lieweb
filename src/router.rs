@@ -3,17 +3,16 @@ use std::collections::HashMap;
 use crate::endpoint::{DynEndpoint, Endpoint};
 use crate::{Request, Response};
 
-type HandlerMap<State, E> = HashMap<String, Box<DynEndpoint<State, E>>>;
+type HandlerMap<State> = HashMap<String, Box<DynEndpoint<State>>>;
 
-pub struct Router<State, E> {
-    handlers: HashMap<http::Method, HandlerMap<State, E>>,
-    handle_not_found: Option<Box<DynEndpoint<State, E>>>,
+pub struct Router<State> {
+    handlers: HashMap<http::Method, HandlerMap<State>>,
+    handle_not_found: Option<Box<DynEndpoint<State>>>,
 }
 
-impl<State, E> Router<State, E>
+impl<State> Router<State>
 where
     State: Send + Sync + 'static,
-    E: std::error::Error + Send + Sync + 'static,
 {
     pub fn new() -> Self {
         Router {
@@ -28,7 +27,7 @@ where
         &mut self,
         method: http::Method,
         path: impl ToString,
-        ep: impl Endpoint<State, E>,
+        ep: impl Endpoint<State>,
     ) {
         self.handlers
             .entry(method)
@@ -37,7 +36,7 @@ where
             .or_insert_with(|| Box::new(move |cx| Box::pin(ep.call(cx))));
     }
 
-    pub(crate) fn find(&self, method: &http::Method, path: &str) -> &DynEndpoint<State, E> {
+    pub(crate) fn find(&self, method: &http::Method, path: &str) -> &DynEndpoint<State> {
         let map = self.handlers.get(method);
         if map.is_none() {
             return self.handle_not_found.as_ref().unwrap();
@@ -51,11 +50,13 @@ where
         handler.unwrap()
     }
 
-    pub fn set_not_found(&mut self, ep: impl Endpoint<State, E>) {
+    pub fn set_not_found(&mut self, ep: impl Endpoint<State>) {
         self.handle_not_found = Some(Box::new(move |cx| Box::pin(ep.call(cx))))
     }
 
-    pub(crate) async fn handle_not_found(_request: Request<State>) -> Result<Response, E> {
+    pub(crate) async fn handle_not_found(
+        _request: Request<State>,
+    ) -> Result<Response, std::io::Error> {
         Ok(Response {
             inner: hyper::Response::builder()
                 .status(404)
