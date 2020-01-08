@@ -1,32 +1,60 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use bytes::Buf;
 use http::header::{HeaderMap, HeaderValue};
-use http::request::Parts;
+use route_recognizer::Params;
 
-use crate::Error;
-
-pub(crate) type HyperBody = hyper::Body;
 pub(crate) type HyperRequest = hyper::Request<hyper::Body>;
 
 #[derive(Debug)]
 pub struct Request<State> {
-    pub(crate) parts: Parts,
-    pub(crate) body: HyperBody,
+    pub(crate) inner: HyperRequest,
+    pub(crate) params: Params,
     state: Arc<State>,
     remote_addr: Option<SocketAddr>,
 }
 
 impl<State> Request<State> {
-    pub fn new(request: HyperRequest, state: Arc<State>, remote_addr: Option<SocketAddr>) -> Self {
-        let (parts, body) = request.into_parts();
+    pub fn new(
+        request: HyperRequest,
+        params: Params,
+        state: Arc<State>,
+        remote_addr: Option<SocketAddr>,
+    ) -> Self {
         Request {
-            parts,
-            body,
+            inner: request,
+            params,
             state,
             remote_addr,
         }
+    }
+
+    pub fn request(&self) -> &HyperRequest {
+        &self.inner
+    }
+
+    pub fn headers(&self) -> &HeaderMap<HeaderValue> {
+        self.inner.headers()
+    }
+
+    pub fn headers_mut(&mut self) -> &mut HeaderMap<HeaderValue> {
+        self.inner.headers_mut()
+    }
+
+    pub fn method(&self) -> &http::Method {
+        self.inner.method()
+    }
+
+    pub fn uri(&self) -> &http::Uri {
+        self.inner.uri()
+    }
+
+    pub fn version(&self) -> http::Version {
+        self.inner.version()
+    }
+
+    pub fn params(&self) -> &Params {
+        &self.params
     }
 
     pub fn state(&self) -> &State {
@@ -35,19 +63,5 @@ impl<State> Request<State> {
 
     pub fn remote_addr(&self) -> Option<SocketAddr> {
         self.remote_addr
-    }
-
-    pub fn headers(&self) -> &HeaderMap<HeaderValue> {
-        &self.parts.headers
-    }
-
-    pub fn headers_mut(&mut self) -> &mut HeaderMap<HeaderValue> {
-        &mut self.parts.headers
-    }
-
-    pub async fn take_body_bytes(&mut self) -> Result<impl Buf, Error> {
-        let empty = HyperBody::empty();
-        let body = std::mem::replace(&mut self.body, empty);
-        hyper::body::aggregate(body).await.map_err(Error::from)
     }
 }

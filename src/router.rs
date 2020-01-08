@@ -1,13 +1,20 @@
 use std::collections::HashMap;
 
-use crate::endpoint::{DynEndpoint, Endpoint};
-use crate::{Request, Response};
+use futures::future::BoxFuture;
+use route_recognizer::{Match, Params, Router as MethodRouter};
 
-type HandlerMap<State> = HashMap<String, Box<DynEndpoint<State>>>;
+use crate::endpoint::{DynEndpoint, Endpoint};
+use crate::{IntoResponse, Request, Response};
 
 pub struct Router<State> {
-    handlers: HashMap<http::Method, HandlerMap<State>>,
+    method_map: HashMap<http::Method, MethodRouter<Box<DynEndpoint<State>>>>,
     handle_not_found: Option<Box<DynEndpoint<State>>>,
+}
+
+/// The result of routing a URL
+pub(crate) struct Selection<'a, State> {
+    pub(crate) endpoint: &'a DynEndpoint<State>,
+    pub(crate) params: Params,
 }
 
 impl<State> Router<State>
@@ -16,52 +23,48 @@ where
 {
     pub fn new() -> Self {
         Router {
-            handlers: HashMap::new(),
+            method_map: HashMap::new(),
             handle_not_found: Some(Box::new(move |cx| {
-                Box::pin(Endpoint::call(&Self::handle_not_found, cx))
+                Box::pin(Endpoint::call(&not_found_endpoint, cx))
             })),
         }
     }
 
-    pub fn register(
-        &mut self,
-        method: http::Method,
-        path: impl ToString,
-        ep: impl Endpoint<State>,
-    ) {
-        self.handlers
+    pub fn register(&mut self, method: http::Method, path: &str, ep: impl Endpoint<State>) {
+        self.method_map
             .entry(method)
-            .or_insert_with(HashMap::new)
-            .entry(path.to_string())
-            .or_insert_with(|| Box::new(move |cx| Box::pin(ep.call(cx))));
+            .or_insert_with(MethodRouter::new)
+            .add(path, Box::new(move |cx| Box::pin(ep.call(cx))));
     }
 
-    pub(crate) fn find(&self, method: &http::Method, path: &str) -> &DynEndpoint<State> {
-        let map = self.handlers.get(method);
-        if map.is_none() {
-            return self.handle_not_found.as_ref().unwrap();
-        }
+    pub(crate) fn find(&self, method: http::Method, path: &str) -> Selection<'_, State> {
+        if let Some(Match { handler, params }) = self
+            .method_map
+            .get(&method)
+            .and_then(|r| r.recognize(path).ok())
+        {
+            Selection {
+                endpoint: &**handler,
+                params,
+            }
+        } else if method == http::Method::HEAD {
+            // If it is a HTTP HEAD request then check if there is a callback in the endpoints map
+            // if not then fallback to the behavior of HTTP GET else proceed as usual
 
-        let handler = map.unwrap().get(path);
-        if handler.is_none() {
-            return self.handle_not_found.as_ref().unwrap();
+            self.find(http::Method::GET, path)
+        } else {
+            Selection {
+                endpoint: &not_found_endpoint,
+                params: Params::new(),
+            }
         }
-
-        handler.unwrap()
     }
 
     pub fn set_not_found(&mut self, ep: impl Endpoint<State>) {
         self.handle_not_found = Some(Box::new(move |cx| Box::pin(ep.call(cx))))
     }
+}
 
-    pub(crate) async fn handle_not_found(
-        _request: Request<State>,
-    ) -> Result<Response, std::io::Error> {
-        Ok(Response {
-            inner: hyper::Response::builder()
-                .status(404)
-                .body(hyper::Body::from("Not Found"))
-                .unwrap(),
-        })
-    }
+fn not_found_endpoint<State>(_cx: Request<State>) -> BoxFuture<'static, Response> {
+    Box::pin(async move { http::StatusCode::NOT_FOUND.into_response() })
 }

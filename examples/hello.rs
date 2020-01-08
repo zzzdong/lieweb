@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use lieweb::{App, Error, Request, Response};
+use lieweb::{App, IntoResponse, Request};
 
 const DEFAULT_ADDR: &'static str = "127.0.0.1:5000";
 
@@ -13,7 +13,7 @@ struct HelloMessage {
 
 type State = Arc<Mutex<u64>>;
 
-async fn request_handler(req: Request<State>) -> Result<Response, Error> {
+async fn request_handler(req: Request<State>) -> impl IntoResponse {
     let value;
 
     {
@@ -22,19 +22,21 @@ async fn request_handler(req: Request<State>) -> Result<Response, Error> {
         *counter += 1;
     }
 
-    Response::with_html(format!(
+    lieweb::response::html(format!(
         "got request#{} from {:?}",
         value,
         req.remote_addr()
     ))
 }
 
-async fn not_found(_req: Request<State>) -> Response {
-    Response::with_text("not found").unwrap()
+async fn not_found(_req: Request<State>) -> impl IntoResponse {
+    http::StatusCode::NOT_FOUND
 }
 
 #[tokio::main]
 async fn main() {
+    env_logger::init();
+
     let mut addr = DEFAULT_ADDR.to_string();
 
     let mut args = std::env::args();
@@ -48,10 +50,12 @@ async fn main() {
 
     let mut app = App::with_state(state);
 
+    app.middleware(lieweb::middleware::RequestLogger);
+
     app.register(http::Method::GET, "/", request_handler);
 
     app.register(http::Method::GET, "/hello", |_req| {
-        async move { Response::with_html("hello, world!") }
+        async move { "hello, world!" }
     });
 
     app.register(http::Method::GET, "/json", |_req| {
@@ -59,9 +63,23 @@ async fn main() {
             let msg = HelloMessage {
                 message: "hello, world!".to_owned(),
             };
-            Response::with_json(msg)
+            lieweb::response::json(&msg)
         }
     });
+
+    app.register(
+        http::Method::GET,
+        "/posts/:id/edit",
+        |req: Request<State>| {
+            async move {
+                req.params()
+                    .find("id")
+                    .unwrap()
+                    .parse()
+                    .map(|id: i32| format!("you are editing post<{}>", id))
+            }
+        },
+    );
 
     app.set_not_found(not_found);
 

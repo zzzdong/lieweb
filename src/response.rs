@@ -1,136 +1,211 @@
-use crate::utils::StdError;
-use crate::Error;
+use std::borrow::Cow;
 
-const NOT_FOUND: &str = "Not Found";
+use http::header::{HeaderName, HeaderValue};
+use http::StatusCode;
 
-pub(crate) type HyperResponse = hyper::Response<hyper::Body>;
+pub type Response = http::Response<hyper::Body>;
 
-pub trait IntoResponse: Send + Sized {
-    /// Convert the value into a `Response`.
-    fn into_response(self) -> Result<Response, StdError>;
+pub struct Html<T> {
+    body: T,
 }
 
-pub struct Builder {
-    inner: http::response::Builder,
+pub fn html<T>(body: T) -> Html<T>
+where
+    hyper::Body: From<T>,
+    T: Send,
+{
+    Html { body }
 }
 
-impl Builder {
-    pub fn new() -> Self {
-        Builder::default()
-    }
-
-    pub fn with_text(self, html: impl Into<String>) -> Result<Response, Error> {
-        let resp = self
-            .inner
-            .header(
-                hyper::header::CONTENT_TYPE,
-                mime::TEXT_PLAIN_UTF_8.to_string(),
-            )
-            .body(hyper::Body::from(html.into()))?;
-
-        Ok(Response { inner: resp })
-    }
-
-    pub fn with_html(self, html: impl Into<String>) -> Result<Response, Error> {
-        let resp = self
-            .inner
+impl<T> IntoResponse for Html<T>
+where
+    hyper::Body: From<T>,
+    T: Send,
+{
+    fn into_response(self) -> Response {
+        http::Response::builder()
             .header(
                 hyper::header::CONTENT_TYPE,
                 mime::TEXT_HTML_UTF_8.to_string(),
             )
-            .body(hyper::Body::from(html.into()))?;
-
-        Ok(Response { inner: resp })
-    }
-
-    pub fn with_json(self, json: impl serde::Serialize) -> Result<Response, Error> {
-        let json = serde_json::to_string(&json)?;
-
-        let resp = self
-            .inner
-            .header(
-                hyper::header::CONTENT_TYPE,
-                mime::APPLICATION_JSON.to_string(),
-            )
-            .body(hyper::Body::from(json))?;
-
-        Ok(Response { inner: resp })
-    }
-
-    pub fn not_found() -> Result<Response, Error> {
-        let resp = Self::new()
-            .inner
-            .header(
-                hyper::header::CONTENT_TYPE,
-                mime::TEXT_PLAIN_UTF_8.to_string(),
-            )
-            .body(hyper::Body::from(NOT_FOUND))?;
-
-        Ok(Response { inner: resp })
+            .body(hyper::Body::from(self.body))
+            .unwrap()
     }
 }
 
-impl Default for Builder {
-    fn default() -> Self {
-        Builder {
-            inner: hyper::Response::builder()
-                .header(hyper::header::SERVER, crate::server::SERVER_ID.to_string()),
-        }
-    }
+pub struct Json {
+    inner: Result<Vec<u8>, serde_json::Error>,
 }
 
-pub struct Response {
-    pub(crate) inner: HyperResponse,
-}
-
-impl Response {
-    pub fn builder() -> Builder {
-        Builder {
-            inner: hyper::Response::builder(),
-        }
-    }
-
-    pub fn with_text(text: impl Into<String>) -> Result<Response, Error> {
-        Self::builder().with_text(text)
-    }
-
-    pub fn with_html(html: impl Into<String>) -> Result<Response, Error> {
-        Self::builder().with_html(html)
-    }
-
-    pub fn with_json(json: impl serde::Serialize) -> Result<Response, Error> {
-        Self::builder().with_json(json)
-    }
-
-    pub fn not_found() -> Result<Response, Error> {
-        Builder::not_found()
-    }
-}
-
-impl From<Response> for HyperResponse {
-    fn from(resp: Response) -> HyperResponse {
-        let Response { inner, .. } = resp;
-        inner
-    }
-}
-
-impl From<HyperResponse> for Response {
-    fn from(resp: HyperResponse) -> Response {
-        Response { inner: resp }
-    }
-}
-
-impl<E> IntoResponse for Result<Response, E>
+pub fn json<T>(val: &T) -> Json
 where
-    E: Into<StdError> + Send + Sync + 'static,
+    T: serde::Serialize,
 {
-    fn into_response(self) -> Result<Response, StdError> {
-        self.map_err(|e| e.into())
+    Json {
+        inner: serde_json::to_vec(val),
+    }
+}
+
+impl IntoResponse for Json {
+    fn into_response(self) -> Response {
+        self.inner
+            .map(|j| {
+                http::Response::builder()
+                    .header(
+                        hyper::header::CONTENT_TYPE,
+                        mime::APPLICATION_JSON.to_string(),
+                    )
+                    .body(hyper::Body::from(j))
+                    .unwrap()
+            })
+            .map_err(|e| {
+                log::error!("json serialize failed, {:?}", e);
+                e
+            })
+            .into_response()
+    }
+}
+
+pub struct WithStatus<T> {
+    response: T,
+    status: StatusCode,
+}
+
+pub fn with_status<R: IntoResponse>(response: R, status: StatusCode) -> WithStatus<R> {
+    WithStatus { response, status }
+}
+
+impl<T> WithStatus<T>
+where
+    T: IntoResponse,
+{
+    fn into_response(self) -> Response {
+        let mut resp = self.response.into_response();
+        *resp.status_mut() = self.status;
+        resp
+    }
+}
+
+pub struct WithHeader<T> {
+    header: (HeaderName, HeaderValue),
+    response: T,
+}
+
+pub fn with_header<T, K, V>(response: T, name: K, value: V) -> WithHeader<T>
+where
+    T: IntoResponse,
+    HeaderName: From<K>,
+    HeaderValue: From<V>,
+{
+    let header = (name.into(), value.into());
+    WithHeader { header, response }
+}
+
+impl<T> IntoResponse for WithHeader<T>
+where
+    T: IntoResponse,
+{
+    fn into_response(self) -> Response {
+        let mut resp = self.response.into_response();
+        resp.headers_mut().insert(self.header.0, self.header.1);
+        resp
+    }
+}
+
+pub trait IntoResponse: Send + Sized {
+    /// Convert the value into a `Response`.
+    fn into_response(self) -> Response;
+}
+
+impl<E, R> IntoResponse for Result<R, E>
+where
+    R: IntoResponse,
+    E: std::error::Error + 'static + Send + Sync,
+{
+    fn into_response(self) -> Response {
+        match self {
+            Ok(r) => r.into_response(),
+            Err(e) => {
+                log::error!("on Result<R, E>, error: {:?}", e);
+
+                http::Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(hyper::Body::from("Internal Server Error"))
+                    .unwrap()
+            }
+        }
     }
 }
 
 impl IntoResponse for Response {
-    fn into_response(self) -> Result<Response, StdError> {
-        Ok(self)
+    fn into_response(self) -> Response {
+        self
+    }
+}
+
+impl IntoResponse for StatusCode {
+    fn into_response(self) -> Response {
+        http::Response::builder()
+            .status(self)
+            .body(hyper::Body::empty())
+            .unwrap()
+    }
+}
+
+impl IntoResponse for String {
+    fn into_response(self) -> Response {
+        http::Response::builder()
+            .header(
+                hyper::header::CONTENT_TYPE,
+                mime::TEXT_PLAIN_UTF_8.to_string(),
+            )
+            .body(hyper::Body::from(self))
+            .unwrap()
+    }
+}
+
+impl IntoResponse for &'static str {
+    fn into_response(self) -> Response {
+        http::Response::builder()
+            .header(
+                hyper::header::CONTENT_TYPE,
+                mime::TEXT_PLAIN_UTF_8.to_string(),
+            )
+            .body(hyper::Body::from(self))
+            .unwrap()
+    }
+}
+
+impl IntoResponse for Cow<'static, str> {
+    #[inline]
+    fn into_response(self) -> Response {
+        match self {
+            Cow::Borrowed(s) => s.into_response(),
+            Cow::Owned(s) => s.into_response(),
+        }
+    }
+}
+
+impl IntoResponse for Vec<u8> {
+    fn into_response(self) -> Response {
+        http::Response::builder()
+            .header(
+                hyper::header::CONTENT_TYPE,
+                mime::APPLICATION_OCTET_STREAM.to_string(),
+            )
+            .body(hyper::Body::from(self))
+            .unwrap()
+    }
+}
+
+impl IntoResponse for &'static [u8] {
+    fn into_response(self) -> Response {
+        http::Response::builder()
+            .header(
+                hyper::header::CONTENT_TYPE,
+                mime::APPLICATION_OCTET_STREAM.to_string(),
+            )
+            .body(hyper::Body::from(self))
+            .unwrap()
     }
 }
