@@ -29,7 +29,8 @@ async fn request_handler(req: Request<State>) -> impl IntoResponse {
     ))
 }
 
-async fn not_found(_req: Request<State>) -> impl IntoResponse {
+async fn not_found(req: Request<State>) -> impl IntoResponse {
+    println!("handler not found for {}", req.uri().path());
     http::StatusCode::NOT_FOUND
 }
 
@@ -54,30 +55,26 @@ async fn main() {
 
     app.register(http::Method::GET, "/", request_handler);
 
-    app.register(http::Method::GET, "/hello", |_req| {
-        async move { "hello, world!" }
+    app.register(http::Method::GET, "/hello", |_req| async move {
+        "hello, world!"
     });
 
-    app.register(http::Method::GET, "/json", |_req| {
-        async move {
-            let msg = HelloMessage {
-                message: "hello, world!".to_owned(),
-            };
-            lieweb::response::json(&msg)
-        }
+    app.register(http::Method::GET, "/json", |_req| async move {
+        let msg = HelloMessage {
+            message: "hello, world!".to_owned(),
+        };
+        lieweb::response::json(&msg)
     });
 
     app.register(
         http::Method::GET,
         "/posts/:id/edit",
-        |req: Request<State>| {
-            async move {
-                req.params()
-                    .find("id")
-                    .unwrap()
-                    .parse()
-                    .map(|id: i32| format!("you are editing post<{}>", id))
-            }
+        |req: Request<State>| async move {
+            req.params()
+                .find("id")
+                .unwrap()
+                .parse()
+                .map(|id: i32| format!("you are editing post<{}>", id))
         },
     );
 

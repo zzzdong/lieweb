@@ -53,9 +53,19 @@ where
 
             self.find(http::Method::GET, path)
         } else {
-            Selection {
-                endpoint: &not_found_endpoint,
-                params: Params::new(),
+            match self.handle_not_found {
+                Some(ref handler) => {
+                    let endpoint = handler;
+
+                    Selection {
+                        endpoint: endpoint,
+                        params: Params::new(),
+                    }
+                }
+                None => Selection {
+                    endpoint: &not_found_endpoint,
+                    params: Params::new(),
+                },
             }
         }
     }
