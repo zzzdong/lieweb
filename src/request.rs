@@ -5,6 +5,7 @@ use bytes::{Buf, Bytes, BytesMut};
 use http::header::{HeaderMap, HeaderValue};
 use hyper::body::HttpBody;
 use route_recognizer::Params;
+use serde::de::DeserializeOwned;
 
 use crate::error::Error;
 
@@ -96,5 +97,11 @@ impl<State> Request<State> {
                 Ok(self.body.as_ref().unwrap())
             }
         }
+    }
+
+    pub async fn read_json<T: DeserializeOwned>(&mut self) -> Result<T, Error> {
+        let body = self.read_body().await?;
+        let json = serde_json::from_slice(body)?;
+        Ok(json)
     }
 }
