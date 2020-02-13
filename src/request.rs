@@ -1,8 +1,12 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use bytes::{Buf, Bytes, BytesMut};
 use http::header::{HeaderMap, HeaderValue};
+use hyper::body::HttpBody;
 use route_recognizer::Params;
+
+use crate::error::Error;
 
 pub(crate) type HyperRequest = hyper::Request<hyper::Body>;
 
@@ -12,6 +16,7 @@ pub struct Request<State> {
     pub(crate) params: Params,
     state: Arc<State>,
     remote_addr: Option<SocketAddr>,
+    body: Option<Bytes>,
 }
 
 impl<State> Request<State> {
@@ -26,11 +31,16 @@ impl<State> Request<State> {
             params,
             state,
             remote_addr,
+            body: None,
         }
     }
 
-    pub fn request(&self) -> &HyperRequest {
+    pub fn inner(&self) -> &HyperRequest {
         &self.inner
+    }
+
+    pub fn innner_mut(&mut self) -> &mut HyperRequest {
+        &mut self.inner
     }
 
     pub fn headers(&self) -> &HeaderMap<HeaderValue> {
@@ -63,5 +73,28 @@ impl<State> Request<State> {
 
     pub fn remote_addr(&self) -> Option<SocketAddr> {
         self.remote_addr
+    }
+
+    pub fn body_bytes(&self) -> Option<&Bytes> {
+        self.body.as_ref()
+    }
+
+    pub async fn read_body(&mut self) -> Result<&Bytes, Error> {
+        match self.body {
+            Some(ref body) => Ok(body),
+            None => {
+                let mut bufs = BytesMut::new();
+                while let Some(buf) = self.inner.body_mut().data().await {
+                    let buf = buf?;
+                    if buf.has_remaining() {
+                        bufs.extend(buf);
+                    }
+                }
+
+                self.body = Some(bufs.freeze());
+
+                Ok(self.body.as_ref().unwrap())
+            }
+        }
     }
 }
