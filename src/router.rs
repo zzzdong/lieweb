@@ -24,9 +24,7 @@ where
     pub fn new() -> Self {
         Router {
             method_map: HashMap::new(),
-            handle_not_found: Some(Box::new(move |cx| {
-                Box::pin(Endpoint::call(&not_found_endpoint, cx))
-            })),
+            handle_not_found: Some(Box::new(&not_found_endpoint)),
         }
     }
 
@@ -34,7 +32,7 @@ where
         self.method_map
             .entry(method)
             .or_insert_with(MethodRouter::new)
-            .add(path, Box::new(move |cx| Box::pin(ep.call(cx))));
+            .add(path, Box::new(ep));
     }
 
     pub(crate) fn find(&self, method: http::Method, path: &str) -> Selection<'_, State> {
@@ -58,7 +56,7 @@ where
                     let endpoint = handler;
 
                     Selection {
-                        endpoint,
+                        endpoint: &**endpoint,
                         params: Params::new(),
                     }
                 }
@@ -71,7 +69,7 @@ where
     }
 
     pub fn set_not_found(&mut self, ep: impl Endpoint<State>) {
-        self.handle_not_found = Some(Box::new(move |cx| Box::pin(ep.call(cx))))
+        self.handle_not_found = Some(Box::new(ep))
     }
 }
 

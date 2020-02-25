@@ -5,14 +5,6 @@ use crate::{
 use futures::future::BoxFuture;
 
 /// A simple requests logger
-///
-/// # Examples
-///
-/// ```rust
-///
-/// let mut app = tide::Server::new();
-/// app.middleware(tide::middleware::RequestLogger::new());
-/// ```
 #[derive(Debug, Clone, Default)]
 pub struct RequestLogger;
 
