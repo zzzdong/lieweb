@@ -11,7 +11,7 @@ documentation = "https://docs.rs/lieweb/"
 description = """
 a simple async web framework
 """
-categories = ["HTTP server", "network-programming", "asynchronous"]
+categories = ["web-programming::http-server", "network-programming", "asynchronous"]
 keywords = ["web", "http", "framework", "async"]
 
 [dependencies]
