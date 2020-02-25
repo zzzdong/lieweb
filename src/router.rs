@@ -58,7 +58,7 @@ where
                     let endpoint = handler;
 
                     Selection {
-                        endpoint: endpoint,
+                        endpoint,
                         params: Params::new(),
                     }
                 }

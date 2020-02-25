@@ -75,7 +75,7 @@ pub fn with_status<R: IntoResponse>(response: R, status: StatusCode) -> WithStat
     WithStatus { response, status }
 }
 
-impl<T> WithStatus<T>
+impl<T> IntoResponse for WithStatus<T>
 where
     T: IntoResponse,
 {
