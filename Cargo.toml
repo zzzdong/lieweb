@@ -1,8 +1,18 @@
 [package]
 name = "lieweb"
-version = "0.1.0"
+version = "0.1.0-beta.1"
 authors = ["zzzdong <kuwater@163.com>"]
 edition = "2018"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/zzzdong/lieweb"
+homepage = "https://github.com/zzzdong/lieweb"
+documentation = "https://docs.rs/lieweb/"
+description = """
+a simple async web framework
+"""
+categories = ["HTTP server", "network-programming", "asynchronous"]
+keywords = ["web", "http", "framework", "async"]
 
 [dependencies]
 bytes = "0.5"
