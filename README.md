@@ -6,6 +6,7 @@ NOTE: `lieweb` currently under early development, you should NOT use it in produ
 [![Crates.io](https://img.shields.io/crates/v/lieweb)](https://crates.io/crates/lieweb)
 [![Documentation](https://docs.rs/lieweb/badge.svg)](https://docs.rs/lieweb)
 [![Crates.io](https://img.shields.io/crates/l/lieweb)](LICENSE)
+![Rust](https://github.com/zzzdong/lieweb/workflows/Rust/badge.svg)
 
 ## Overview
 
