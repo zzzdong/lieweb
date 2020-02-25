@@ -2,8 +2,11 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use bytes::{Buf, Bytes, BytesMut};
-use http::header::{HeaderMap, HeaderValue};
 use hyper::body::HttpBody;
+use hyper::http::{
+    self,
+    header::{HeaderMap, HeaderValue},
+};
 use route_recognizer::Params;
 use serde::de::DeserializeOwned;
 

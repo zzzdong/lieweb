@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use futures::future::BoxFuture;
+use hyper::http;
 use route_recognizer::{Match, Params, Router as MethodRouter};
 
 use crate::endpoint::{DynEndpoint, Endpoint};
@@ -50,6 +51,18 @@ where
             // if not then fallback to the behavior of HTTP GET else proceed as usual
 
             self.find(http::Method::GET, path)
+        } else if self
+            .method_map
+            .iter()
+            .filter(|(k, _)| *k != method)
+            .any(|(_, r)| r.recognize(path).is_ok())
+        {
+            // If this `path` can be handled by a callback registered with a different HTTP method
+            // should return 405 Method Not Allowed
+            Selection {
+                endpoint: &method_not_allowed,
+                params: Params::new(),
+            }
         } else {
             match self.handle_not_found {
                 Some(ref handler) => {
@@ -75,4 +88,8 @@ where
 
 fn not_found_endpoint<State>(_cx: Request<State>) -> BoxFuture<'static, Response> {
     Box::pin(async move { http::StatusCode::NOT_FOUND.into_response() })
+}
+
+fn method_not_allowed<State>(_cx: Request<State>) -> BoxFuture<'static, Response> {
+    Box::pin(async move { http::StatusCode::METHOD_NOT_ALLOWED.into_response() })
 }

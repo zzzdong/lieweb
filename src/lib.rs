@@ -12,4 +12,6 @@ pub use response::{IntoResponse, Response};
 pub use server::App;
 
 // reexport
-pub use http;
+pub use hyper;
+pub use hyper::http;
+pub use mime;

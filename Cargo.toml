@@ -18,7 +18,6 @@ keywords = ["web", "http", "framework", "async"]
 bytes = "0.5"
 futures = "0.3"
 futures-util = "0.3"
-http = "0.2"
 hyper = "0.13"
 lazy_static = "1.4"
 log = "0.4"

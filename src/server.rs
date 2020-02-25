@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use hyper::http;
 use hyper::server::conn::AddrStream;
 use hyper::service::{make_service_fn, service_fn};
 use lazy_static::lazy_static;

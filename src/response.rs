@@ -1,9 +1,18 @@
 use std::borrow::Cow;
+use std::convert::TryFrom;
 
-use http::header::{HeaderName, HeaderValue};
-use http::StatusCode;
+use hyper::http::{
+    self,
+    header::{HeaderName, HeaderValue},
+    StatusCode,
+};
 
 pub type Response = http::Response<hyper::Body>;
+
+pub trait IntoResponse: Send + Sized {
+    /// Convert the value into a `Response`.
+    fn into_response(self) -> Response;
+}
 
 pub struct Html<T> {
     body: T,
@@ -87,17 +96,32 @@ where
 }
 
 pub struct WithHeader<T> {
-    header: (HeaderName, HeaderValue),
+    header: Option<(HeaderName, HeaderValue)>,
     response: T,
 }
 
 pub fn with_header<T, K, V>(response: T, name: K, value: V) -> WithHeader<T>
 where
     T: IntoResponse,
-    HeaderName: From<K>,
-    HeaderValue: From<V>,
+    HeaderName: TryFrom<K>,
+    <HeaderName as TryFrom<K>>::Error: Into<http::Error>,
+    HeaderValue: TryFrom<V>,
+    <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
 {
-    let header = (name.into(), value.into());
+    let header = match <HeaderName as TryFrom<K>>::try_from(name) {
+        Ok(name) => match <HeaderValue as TryFrom<V>>::try_from(value) {
+            Ok(value) => Some((name, value)),
+            Err(err) => {
+                log::error!("with_header value error: {}", err.into());
+                None
+            }
+        },
+        Err(err) => {
+            log::error!("with_header name error: {}", err.into());
+            None
+        }
+    };
+
     WithHeader { header, response }
 }
 
@@ -107,14 +131,11 @@ where
 {
     fn into_response(self) -> Response {
         let mut resp = self.response.into_response();
-        resp.headers_mut().insert(self.header.0, self.header.1);
+        if let Some((name, value)) = self.header {
+            resp.headers_mut().insert(name, value);
+        }
         resp
     }
-}
-
-pub trait IntoResponse: Send + Sized {
-    /// Convert the value into a `Response`.
-    fn into_response(self) -> Response;
 }
 
 impl<E, R> IntoResponse for Result<R, E>
