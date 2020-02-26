@@ -149,6 +149,12 @@ where
     }
 }
 
+impl<State: Send + Sync + 'static> Default for Router<State> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn not_found_endpoint<State>(_cx: Request<State>) -> BoxFuture<'static, Response> {
     Box::pin(async move { http::StatusCode::NOT_FOUND.into_response() })
 }
