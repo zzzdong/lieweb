@@ -117,6 +117,26 @@ impl<State> Request<State> {
         Ok(json)
     }
 
+    pub fn read_query<T: DeserializeOwned + Default>(&self) -> Result<T, Error> {
+        match self.uri().query() {
+            Some(query) => serde_urlencoded::from_str(query).map_err(Error::from),
+            None => Ok(Default::default()),
+        }
+    }
+
+    pub fn read_param<T>(&self, param: &str) -> Result<T, Error>
+    where
+        T: std::str::FromStr,
+        <T as std::str::FromStr>::Err: std::error::Error,
+    {
+        match self.params.find(param) {
+            Some(param) => param
+                .parse()
+                .map_err(|e| crate::error_msg!("parse param error: {:?}", e)),
+            None => Err(crate::error_msg!("param {} not found", param)),
+        }
+    }
+
     pub(crate) fn route_path(&mut self) -> &str {
         &self.path()[self.route_prefix.len()..]
     }
