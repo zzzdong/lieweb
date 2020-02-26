@@ -8,7 +8,8 @@ mod server;
 
 pub use error::Error;
 pub use request::Request;
-pub use response::{IntoResponse, Response};
+pub use response::*;
+pub use router::Router;
 pub use server::App;
 
 // reexport

@@ -1,21 +1,26 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use futures::future::BoxFuture;
 use hyper::http;
 use route_recognizer::{Match, Params, Router as MethodRouter};
 
-use crate::endpoint::{DynEndpoint, Endpoint};
+use crate::endpoint::{DynEndpoint, Endpoint, RouterEndpoint};
+use crate::middleware::{Middleware, Next};
 use crate::{IntoResponse, Request, Response};
-
-pub struct Router<State> {
-    method_map: HashMap<http::Method, MethodRouter<Box<DynEndpoint<State>>>>,
-    handle_not_found: Option<Box<DynEndpoint<State>>>,
-}
 
 /// The result of routing a URL
 pub(crate) struct Selection<'a, State> {
     pub(crate) endpoint: &'a DynEndpoint<State>,
     pub(crate) params: Params,
+}
+
+pub struct Router<State> {
+    prefix: String,
+    middlewares: Vec<Arc<dyn Middleware<State>>>,
+    method_map: HashMap<http::Method, MethodRouter<Box<DynEndpoint<State>>>>,
+    handle_not_found: Option<Box<DynEndpoint<State>>>,
+    all_method_router: MethodRouter<Box<DynEndpoint<State>>>,
 }
 
 impl<State> Router<State>
@@ -24,9 +29,17 @@ where
 {
     pub fn new() -> Self {
         Router {
-            method_map: HashMap::new(),
+            prefix: String::new(),
+            middlewares: Vec::new(),
             handle_not_found: Some(Box::new(&not_found_endpoint)),
+            method_map: HashMap::new(),
+            all_method_router: MethodRouter::new(),
         }
+    }
+
+    pub fn middleware(&mut self, m: impl Middleware<State>) -> &mut Self {
+        self.middlewares.push(Arc::new(m));
+        self
     }
 
     pub fn register(&mut self, method: http::Method, path: &str, ep: impl Endpoint<State>) {
@@ -36,12 +49,41 @@ where
             .add(path, Box::new(ep));
     }
 
+    pub fn attach(
+        &mut self,
+        prefix: &str,
+        router: Router<State>,
+    ) -> Result<(), crate::error::Error> {
+        if !prefix.starts_with('/') || !prefix.ends_with('/') {
+            return Err(crate::error::Error::Message(
+                "prefix must be a path, start with / and end with /".to_string(),
+            ));
+        }
+
+        let mut router = router;
+        router.set_prefix(prefix);
+        let router = Arc::new(router);
+
+        let endpoint = RouterEndpoint::new(router);
+
+        let path = prefix.to_string() + "*lieweb-nested-router";
+
+        self.all_method_router.add(&path, Box::new(endpoint));
+
+        Ok(())
+    }
+
     pub(crate) fn find(&self, method: http::Method, path: &str) -> Selection<'_, State> {
         if let Some(Match { handler, params }) = self
             .method_map
             .get(&method)
             .and_then(|r| r.recognize(path).ok())
         {
+            Selection {
+                endpoint: &**handler,
+                params,
+            }
+        } else if let Ok(Match { handler, params }) = self.all_method_router.recognize(path) {
             Selection {
                 endpoint: &**handler,
                 params,
@@ -83,6 +125,27 @@ where
 
     pub fn set_not_found(&mut self, ep: impl Endpoint<State>) {
         self.handle_not_found = Some(Box::new(ep))
+    }
+
+    pub(crate) async fn serve(&self, req: Request<State>) -> Response {
+        let mut req = req;
+        req.append_route_prefix(&self.prefix);
+        let method = req.method().clone();
+
+        let path = req.route_path();
+        let Selection { endpoint, params } = self.find(method, path);
+        req.merge_params(&params);
+
+        let next = Next {
+            endpoint,
+            next_middleware: &self.middlewares,
+        };
+
+        next.run(req).await
+    }
+
+    fn set_prefix(&mut self, prefix: &str) {
+        self.prefix = prefix.to_string();
     }
 }
 

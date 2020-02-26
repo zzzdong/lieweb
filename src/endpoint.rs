@@ -1,7 +1,9 @@
 use std::future::Future;
+use std::sync::Arc;
 
 use futures::future::BoxFuture;
 
+use crate::router::Router;
 use crate::{IntoResponse, Request, Response};
 
 pub(crate) type DynEndpoint<State> = dyn Endpoint<State>;
@@ -19,6 +21,23 @@ where
 {
     fn call<'a>(&'a self, req: Request<State>) -> BoxFuture<'a, Response> {
         let fut = (self)(req);
+        Box::pin(async move { fut.await.into_response() })
+    }
+}
+
+pub(crate) struct RouterEndpoint<State> {
+    router: Arc<Router<State>>,
+}
+
+impl<State> RouterEndpoint<State> {
+    pub(crate) fn new(router: Arc<Router<State>>) -> RouterEndpoint<State> {
+        RouterEndpoint { router }
+    }
+}
+
+impl<State: Send + Sync + 'static> Endpoint<State> for RouterEndpoint<State> {
+    fn call<'a>(&'a self, req: Request<State>) -> BoxFuture<'a, Response> {
+        let fut = self.router.serve(req);
         Box::pin(async move { fut.await.into_response() })
     }
 }

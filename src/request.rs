@@ -21,21 +21,18 @@ pub struct Request<State> {
     state: Arc<State>,
     remote_addr: Option<SocketAddr>,
     body: Option<Bytes>,
+    route_prefix: String,
 }
 
 impl<State> Request<State> {
-    pub fn new(
-        request: HyperRequest,
-        params: Params,
-        state: Arc<State>,
-        remote_addr: Option<SocketAddr>,
-    ) -> Self {
+    pub fn new(request: HyperRequest, state: Arc<State>, remote_addr: Option<SocketAddr>) -> Self {
         Request {
             inner: request,
-            params,
+            params: Params::new(),
             state,
             remote_addr,
             body: None,
+            route_prefix: String::new(),
         }
     }
 
@@ -63,11 +60,23 @@ impl<State> Request<State> {
         self.inner.uri()
     }
 
+    pub fn path(&self) -> &str {
+        self.uri().path()
+    }
+
     pub fn version(&self) -> http::Version {
         self.inner.version()
     }
 
     pub fn params(&self) -> &Params {
+        &self.params
+    }
+
+    pub(crate) fn merge_params(&mut self, other: &Params) -> &Params {
+        for (k, v) in other {
+            self.params.insert(k.to_string(), v.to_string());
+        }
+
         &self.params
     }
 
@@ -106,5 +115,13 @@ impl<State> Request<State> {
         let body = self.read_body().await?;
         let json = serde_json::from_slice(body)?;
         Ok(json)
+    }
+
+    pub(crate) fn route_path(&mut self) -> &str {
+        &self.uri().path()[self.route_prefix.len()..]
+    }
+
+    pub(crate) fn append_route_prefix(&mut self, prefix: &str) {
+        self.route_prefix += prefix;
     }
 }

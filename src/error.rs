@@ -8,4 +8,6 @@ pub enum Error {
     HttpError(#[from] hyper::http::Error),
     #[error("json error")]
     JsonError(#[from] serde_json::Error),
+    #[error("lieweb error")]
+    Message(String),
 }

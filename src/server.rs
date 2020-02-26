@@ -6,10 +6,10 @@ use hyper::server::conn::AddrStream;
 use hyper::service::{make_service_fn, service_fn};
 use lazy_static::lazy_static;
 
-use crate::endpoint::Endpoint;
-use crate::middleware::{Middleware, Next};
+use crate::endpoint::{Endpoint, RouterEndpoint};
+use crate::middleware::Middleware;
 use crate::request::Request;
-use crate::router::{Router, Selection};
+use crate::router::Router;
 use crate::Error;
 
 lazy_static! {
@@ -19,7 +19,6 @@ lazy_static! {
 pub struct App<State> {
     state: State,
     router: Router<State>,
-    middlewares: Vec<Arc<dyn Middleware<State>>>,
 }
 
 impl<State: Send + Sync + 'static> App<State> {
@@ -27,8 +26,11 @@ impl<State: Send + Sync + 'static> App<State> {
         App {
             state,
             router: Router::new(),
-            middlewares: Vec::new(),
         }
+    }
+
+    pub fn router_mut(&mut self) -> &mut Router<State> {
+        &mut self.router
     }
 
     pub fn register(
@@ -41,8 +43,12 @@ impl<State: Send + Sync + 'static> App<State> {
         self
     }
 
+    pub fn attach(&mut self, prefix: &str, router: Router<State>) -> Result<(), Error> {
+        self.router.attach(prefix, router)
+    }
+
     pub fn middleware(&mut self, m: impl Middleware<State>) -> &mut Self {
-        self.middlewares.push(Arc::new(m));
+        self.router.middleware(m);
         self
     }
 
@@ -52,11 +58,7 @@ impl<State: Send + Sync + 'static> App<State> {
     }
 
     pub async fn run(self, addr: &SocketAddr) -> Result<(), Error> {
-        let App {
-            state,
-            router,
-            middlewares,
-        } = self;
+        let App { state, router } = self;
 
         let state = Arc::new(state);
         let router = Arc::new(router);
@@ -65,28 +67,21 @@ impl<State: Send + Sync + 'static> App<State> {
             let state = state.clone();
             let remote_addr = socket.remote_addr();
             let router = router.clone();
-            let middlewares = middlewares.clone();
 
             async move {
                 // This is the `Service` that will handle the connection.
                 // `service_fn` is a helper to convert a function that
                 // returns a Response into a `Service`.
                 Ok::<_, Error>(service_fn(move |req| {
-                    let path = req.uri().path().to_string();
-                    let method = req.method().clone();
                     let router = router.clone();
                     let state = state.clone();
-                    let middlewares = middlewares.clone();
 
                     async move {
-                        let Selection { endpoint, params } = router.find(method, &path);
-                        let request = Request::new(req, params, state, Some(remote_addr));
-                        let next = Next {
-                            endpoint,
-                            next_middleware: &middlewares,
-                        };
+                        let request = Request::new(req, state, Some(remote_addr));
 
-                        let resp = next.run(request).await;
+                        let endpoint = RouterEndpoint::new(router);
+                        let resp = endpoint.call(request).await;
+
                         Ok::<_, Error>(resp)
                     }
                 }))
@@ -99,23 +94,4 @@ impl<State: Send + Sync + 'static> App<State> {
 
         Ok(())
     }
-
-    // pub async fn run2(self, addr: &SocketAddr) -> Result<(), Error> {
-    //     let App { state, router } = self;
-
-    //     let state = Arc::new(state);
-    //     let router = Arc::new(router);
-
-    //     let svc = Service {
-    //         state,
-    //         router,
-    //         remote_addr: None,
-    //     };
-
-    //     let server = Server::bind(&addr).serve(MakeSvc { inner: svc });
-    //     println!("Listening on http://{}", addr);
-    //     server.await?;
-
-    //     Ok(())
-    // }
 }
