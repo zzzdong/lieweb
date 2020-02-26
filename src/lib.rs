@@ -10,7 +10,7 @@ pub use error::Error;
 pub use request::Request;
 pub use response::*;
 pub use router::Router;
-pub use server::App;
+pub use server::{server_id, App};
 
 // reexport
 pub use hyper;

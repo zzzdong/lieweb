@@ -1,6 +1,8 @@
 // import mod
+mod default_headers;
 mod logger;
 
+pub use default_headers::DefaultHeaders;
 pub use logger::RequestLogger;
 
 use std::sync::Arc;

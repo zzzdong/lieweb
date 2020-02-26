@@ -118,7 +118,7 @@ impl<State> Request<State> {
     }
 
     pub(crate) fn route_path(&mut self) -> &str {
-        &self.uri().path()[self.route_prefix.len()..]
+        &self.path()[self.route_prefix.len()..]
     }
 
     pub(crate) fn append_route_prefix(&mut self, prefix: &str) {

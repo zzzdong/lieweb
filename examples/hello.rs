@@ -1,8 +1,7 @@
 use std::sync::{Arc, Mutex};
 
-use lieweb::{http, App, IntoResponse, Request};
+use lieweb::{http, middleware, App, IntoResponse, Request};
 
-const SERVER_ID: &'static str = "lieweb";
 const DEFAULT_ADDR: &'static str = "127.0.0.1:5000";
 
 use serde::{Deserialize, Serialize};
@@ -23,12 +22,11 @@ async fn request_handler(req: Request<State>) -> impl IntoResponse {
         *counter += 1;
     }
 
-    let resp = lieweb::response::html(format!(
+    lieweb::html(format!(
         "got request#{} from {:?}",
         value,
         req.remote_addr()
-    ));
-    lieweb::response::with_header(resp, http::header::SERVER, SERVER_ID)
+    ))
 }
 
 async fn not_found(req: Request<State>) -> impl IntoResponse {
@@ -53,7 +51,10 @@ async fn main() {
 
     let mut app = App::with_state(state);
 
-    app.middleware(lieweb::middleware::RequestLogger);
+    let mut default_headers = middleware::DefaultHeaders::new();
+    default_headers.header(http::header::SERVER, lieweb::server_id());
+
+    app.middleware(middleware::RequestLogger);
 
     app.register(http::Method::GET, "/", request_handler);
 

@@ -95,3 +95,7 @@ impl<State: Send + Sync + 'static> App<State> {
         Ok(())
     }
 }
+
+pub fn server_id() -> &'static str {
+    &SERVER_ID
+}

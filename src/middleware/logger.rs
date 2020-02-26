@@ -18,9 +18,10 @@ impl RequestLogger {
         ctx: Request<State>,
         next: Next<'a, State>,
     ) -> Response {
-        let path = ctx.uri().path().to_owned();
+        let path = ctx.path().to_owned();
         let method = ctx.method().as_str().to_owned();
-        log::trace!("IN => {} {}", method, path);
+        let remote_addr = ctx.remote_addr();
+        log::trace!("IN => {} {}, From {:?}", method, path, remote_addr);
         let start = std::time::Instant::now();
         let res = next.run(ctx).await;
         let status = res.status();
