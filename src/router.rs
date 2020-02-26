@@ -49,6 +49,41 @@ where
             .add(path, Box::new(ep));
     }
 
+    pub fn get(&mut self, path: &str, ep: impl Endpoint<State>) {
+        self.register(http::Method::GET, path, ep)
+    }
+    pub fn head(&mut self, path: &str, ep: impl Endpoint<State>) {
+        self.register(http::Method::HEAD, path, ep)
+    }
+
+    pub fn post(&mut self, path: &str, ep: impl Endpoint<State>) {
+        self.register(http::Method::POST, path, ep)
+    }
+
+    pub fn put(&mut self, path: &str, ep: impl Endpoint<State>) {
+        self.register(http::Method::PUT, path, ep)
+    }
+
+    pub fn delete(&mut self, path: &str, ep: impl Endpoint<State>) {
+        self.register(http::Method::DELETE, path, ep)
+    }
+
+    pub fn connect(&mut self, path: &str, ep: impl Endpoint<State>) {
+        self.register(http::Method::CONNECT, path, ep)
+    }
+
+    pub fn options(&mut self, path: &str, ep: impl Endpoint<State>) {
+        self.register(http::Method::OPTIONS, path, ep)
+    }
+
+    pub fn trace(&mut self, path: &str, ep: impl Endpoint<State>) {
+        self.register(http::Method::TRACE, path, ep)
+    }
+
+    pub fn patch(&mut self, path: &str, ep: impl Endpoint<State>) {
+        self.register(http::Method::PATCH, path, ep)
+    }
+
     pub fn attach(
         &mut self,
         prefix: &str,
@@ -56,7 +91,8 @@ where
     ) -> Result<(), crate::error::Error> {
         if !prefix.starts_with('/') || !prefix.ends_with('/') {
             return Err(crate::error::Error::Message(
-                "prefix must be a path, start with / and end with /".to_string(),
+                "attach nested route, prefix must be a path, start with / and end with /"
+                    .to_string(),
             ));
         }
 
@@ -127,7 +163,7 @@ where
         self.handle_not_found = Some(Box::new(ep))
     }
 
-    pub(crate) async fn serve(&self, req: Request<State>) -> Response {
+    pub(crate) async fn route(&self, req: Request<State>) -> Response {
         let mut req = req;
         req.append_route_prefix(&self.prefix);
         let method = req.method().clone();
@@ -152,6 +188,17 @@ where
 impl<State: Send + Sync + 'static> Default for Router<State> {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl<State: Send + Sync + 'static> std::fmt::Debug for Router<State> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Router{{ prefix: {}, middlewares: (length: {}) }}",
+            self.prefix,
+            self.middlewares.len()
+        )
     }
 }
 

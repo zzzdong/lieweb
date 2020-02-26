@@ -37,7 +37,13 @@ impl<State> RouterEndpoint<State> {
 
 impl<State: Send + Sync + 'static> Endpoint<State> for RouterEndpoint<State> {
     fn call<'a>(&'a self, req: Request<State>) -> BoxFuture<'a, Response> {
-        let fut = self.router.serve(req);
+        let fut = self.router.route(req);
         Box::pin(async move { fut.await.into_response() })
+    }
+}
+
+impl<State: Send + Sync + 'static> std::fmt::Debug for RouterEndpoint<State> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "RouterEndpoint{{ router: {:?} }}", self.router)
     }
 }

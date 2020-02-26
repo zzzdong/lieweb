@@ -33,6 +33,50 @@ impl<State: Send + Sync + 'static> App<State> {
         &mut self.router
     }
 
+    pub fn get(&mut self, path: &str, ep: impl Endpoint<State>) -> &mut Self {
+        self.router.get(path, ep);
+        self
+    }
+    pub fn head(&mut self, path: &str, ep: impl Endpoint<State>) -> &mut Self {
+        self.router.head(path, ep);
+        self
+    }
+
+    pub fn post(&mut self, path: &str, ep: impl Endpoint<State>) -> &mut Self {
+        self.router.post(path, ep);
+        self
+    }
+
+    pub fn put(&mut self, path: &str, ep: impl Endpoint<State>) -> &mut Self {
+        self.router.put(path, ep);
+        self
+    }
+
+    pub fn delete(&mut self, path: &str, ep: impl Endpoint<State>) -> &mut Self {
+        self.router.delete(path, ep);
+        self
+    }
+
+    pub fn connect(&mut self, path: &str, ep: impl Endpoint<State>) -> &mut Self {
+        self.router.connect(path, ep);
+        self
+    }
+
+    pub fn options(&mut self, path: &str, ep: impl Endpoint<State>) -> &mut Self {
+        self.router.options(path, ep);
+        self
+    }
+
+    pub fn trace(&mut self, path: &str, ep: impl Endpoint<State>) -> &mut Self {
+        self.router.trace(path, ep);
+        self
+    }
+
+    pub fn patch(&mut self, path: &str, ep: impl Endpoint<State>) -> &mut Self {
+        self.router.patch(path, ep);
+        self
+    }
+
     pub fn register(
         &mut self,
         method: http::Method,
@@ -43,8 +87,8 @@ impl<State: Send + Sync + 'static> App<State> {
         self
     }
 
-    pub fn attach(&mut self, prefix: &str, router: Router<State>) -> Result<(), Error> {
-        self.router.attach(prefix, router)
+    pub fn attach(&mut self, prefix: &str, router: Router<State>) -> Result<&mut Self, Error> {
+        self.router.attach(prefix, router).map(|_| self)
     }
 
     pub fn middleware(&mut self, m: impl Middleware<State>) -> &mut Self {
