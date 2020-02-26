@@ -1,8 +1,9 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use lieweb::{http, middleware, App, IntoResponse, Request, Router};
+use tokio::sync::Mutex;
 
-const DEFAULT_ADDR: &'static str = "127.0.0.1:5000";
+const DEFAULT_ADDR: &str = "127.0.0.1:5000";
 
 type State = Arc<Mutex<u64>>;
 
@@ -10,7 +11,7 @@ async fn request_handler(req: Request<State>) -> impl IntoResponse {
     let value;
 
     {
-        let mut counter = req.state().lock().unwrap();
+        let mut counter = req.state().lock().await;
         value = *counter;
         *counter += 1;
     }

@@ -1,10 +1,10 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use lieweb::{http, middleware, App, IntoResponse, Request};
-
-const DEFAULT_ADDR: &'static str = "127.0.0.1:5000";
-
 use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex;
+
+const DEFAULT_ADDR: &str = "127.0.0.1:5000";
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct HelloMessage {
@@ -17,7 +17,7 @@ async fn request_handler(req: Request<State>) -> impl IntoResponse {
     let value;
 
     {
-        let mut counter = req.state().lock().unwrap();
+        let mut counter = req.state().lock().await;
         value = *counter;
         *counter += 1;
     }
@@ -55,6 +55,7 @@ async fn main() {
     default_headers.header(http::header::SERVER, lieweb::server_id());
 
     app.middleware(middleware::RequestLogger);
+    app.middleware(default_headers);
 
     app.register(http::Method::GET, "/", request_handler);
 
