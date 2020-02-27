@@ -1,3 +1,4 @@
+use std::io::Cursor;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -5,8 +6,10 @@ use bytes::{Buf, Bytes, BytesMut};
 use hyper::body::HttpBody;
 use hyper::http::{
     self,
-    header::{HeaderMap, HeaderValue},
+    header::{self, HeaderMap, HeaderName, HeaderValue},
 };
+use mime::Mime;
+use multipart::server::Multipart;
 use route_recognizer::Params;
 use serde::de::DeserializeOwned;
 
@@ -88,11 +91,7 @@ impl<State> Request<State> {
         self.remote_addr
     }
 
-    pub fn body_bytes(&self) -> Option<&Bytes> {
-        self.body.as_ref()
-    }
-
-    pub async fn read_body(&mut self) -> Result<&Bytes, Error> {
+    pub async fn body_bytes(&mut self) -> Result<&Bytes, Error> {
         match self.body {
             Some(ref body) => Ok(body),
             None => {
@@ -112,19 +111,57 @@ impl<State> Request<State> {
     }
 
     pub async fn read_json<T: DeserializeOwned>(&mut self) -> Result<T, Error> {
-        let body = self.read_body().await?;
+        let body = self.body_bytes().await?;
         let json = serde_json::from_slice(body)?;
+
         Ok(json)
     }
 
-    pub fn read_query<T: DeserializeOwned + Default>(&self) -> Result<T, Error> {
+    pub async fn read_form<T: DeserializeOwned>(&mut self) -> Result<T, Error> {
+        let body = self.body_bytes().await?;
+        let form = serde_urlencoded::from_bytes(body)?;
+
+        Ok(form)
+    }
+
+    pub async fn read_multipartform(&mut self) -> Result<Multipart<Cursor<Bytes>>, Error> {
+        let content_type = self.get_header(header::CONTENT_TYPE)?;
+        let mime: Mime = content_type
+            .to_str()
+            .unwrap()
+            .parse()
+            .map_err(|e| crate::error_msg!("parse mime failed: {}", e))?;
+        let boundary = mime
+            .get_param("boundary")
+            .map(|v| v.to_string())
+            .ok_or_else(|| crate::error_msg!("read_form, boundary not found"))?;
+
+        let m = Multipart::with_body(Cursor::new(self.body_bytes().await?.clone()), boundary);
+
+        Ok(m)
+    }
+
+    pub fn get_header<K>(&mut self, header: K) -> Result<&HeaderValue, Error>
+    where
+        HeaderName: From<K>,
+    {
+        let key: HeaderName = header.into();
+        let value = self
+            .headers()
+            .get(key)
+            .ok_or_else(|| crate::error_msg!("Header not found"))?;
+
+        Ok(value)
+    }
+
+    pub fn get_query<T: DeserializeOwned + Default>(&self) -> Result<T, Error> {
         match self.uri().query() {
             Some(query) => serde_urlencoded::from_str(query).map_err(Error::from),
             None => Ok(Default::default()),
         }
     }
 
-    pub fn read_param<T>(&self, param: &str) -> Result<T, Error>
+    pub fn get_param<T>(&self, param: &str) -> Result<T, Error>
     where
         T: std::str::FromStr,
         <T as std::str::FromStr>::Err: std::error::Error,

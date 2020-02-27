@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use lieweb::{http, middleware, App, IntoResponse, Request};
+use lieweb::{http, middleware, App, Error, IntoResponse, Request};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
@@ -34,6 +34,39 @@ async fn not_found(req: Request<State>) -> impl IntoResponse {
     http::StatusCode::NOT_FOUND
 }
 
+async fn handle_form_data(mut req: Request<State>) -> Result<String, Error> {
+    let mut multipart = req.read_multipartform().await?;
+
+    multipart
+        .foreach_entry(|mut entry| {
+            println!("form field name: {:?}", entry.headers.name);
+            let filename = entry.headers.filename.unwrap_or("unknown.txt".to_string());
+            let filepath = format!("./{}-{}", entry.headers.name, filename);
+            match entry
+                .data
+                .save()
+                .size_limit(8 * 1024 * 1024)
+                .memory_threshold(0)
+                .with_path(&filepath)
+                .into_result_strict()
+            {
+                Ok(f) => println!("save file {:?}, {:?}", filepath, f),
+                Err(e) => println!("write form data failed, error: {:?}", e),
+            }
+        })
+        .unwrap();
+
+    Ok("ok".to_string())
+}
+
+async fn handle_form_urlencoded(mut req: Request<State>) -> Result<impl IntoResponse, Error> {
+    let form: serde_json::Value = req.read_form().await?;
+
+    println!("form=> {:?}", form);
+
+    Ok(lieweb::json(&form))
+}
+
 #[tokio::main]
 async fn main() {
     env_logger::init();
@@ -59,28 +92,22 @@ async fn main() {
 
     app.register(http::Method::GET, "/", request_handler);
 
-    app.register(http::Method::GET, "/hello", |_req| async move {
-        "hello, world!"
-    });
+    app.get("/hello", |_req| async move { "hello, world!" });
 
-    app.register(http::Method::GET, "/json", |_req| async move {
+    app.get("/json", |_req| async move {
         let msg = HelloMessage {
             message: "hello, world!".to_owned(),
         };
         lieweb::response::json(&msg)
     });
 
-    app.register(
-        http::Method::GET,
-        "/posts/:id/edit",
-        |req: Request<State>| async move {
-            req.params()
-                .find("id")
-                .unwrap()
-                .parse()
-                .map(|id: i32| format!("you are editing post<{}>", id))
-        },
-    );
+    app.post("/form-data", handle_form_data);
+    app.post("/form-urlencoded", handle_form_urlencoded);
+
+    app.post("/posts/:id/edit", |req: Request<State>| async move {
+        let id: u32 = req.get_param("id").unwrap();
+        format!("you are editing post<{}>", id)
+    });
 
     app.set_not_found(not_found);
 

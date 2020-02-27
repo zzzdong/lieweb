@@ -73,7 +73,7 @@ mod handlers {
     use lieweb::{http::StatusCode, IntoResponse, Request, Response};
 
     pub async fn list_todos(req: Request<State>) -> Result<Response, lieweb::Error> {
-        let opts: ListOptions = req.read_query()?;
+        let opts: ListOptions = req.get_query()?;
 
         let state = req.state().lock().await;
 
@@ -107,7 +107,7 @@ mod handlers {
     }
 
     pub async fn update_todo(mut req: Request<State>) -> Result<StatusCode, lieweb::Error> {
-        let todo_id: u64 = req.read_param("id")?;
+        let todo_id: u64 = req.get_param("id")?;
 
         let update: Todo = req.read_json().await?;
 
@@ -126,7 +126,7 @@ mod handlers {
     }
 
     pub async fn delete_todo(req: Request<State>) -> Result<StatusCode, lieweb::Error> {
-        let todo_id: u64 = req.read_param("id")?;
+        let todo_id: u64 = req.get_param("id")?;
 
         let mut state = req.state().lock().await;
 
