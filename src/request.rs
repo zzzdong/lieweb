@@ -43,7 +43,7 @@ impl<State> Request<State> {
         &self.inner
     }
 
-    pub fn innner_mut(&mut self) -> &mut HyperRequest {
+    pub fn inner_mut(&mut self) -> &mut HyperRequest {
         &mut self.inner
     }
 

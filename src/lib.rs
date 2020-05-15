@@ -5,6 +5,8 @@ mod request;
 pub mod response;
 mod router;
 mod server;
+#[allow(dead_code)]
+mod utils;
 
 pub use error::Error;
 pub use request::Request;

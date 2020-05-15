@@ -8,6 +8,7 @@ use hyper::http::{
 };
 
 pub type Response = http::Response<hyper::Body>;
+pub type HyperResponse = http::Response<hyper::Body>;
 
 pub trait IntoResponse: Send + Sized {
     /// Convert the value into a `Response`.
