@@ -7,11 +7,13 @@ const DEFAULT_ADDR: &str = "127.0.0.1:5000";
 
 type State = Arc<Mutex<u64>>;
 
-async fn request_handler(req: Request<State>) -> impl IntoResponse {
+async fn request_handler(req: Request) -> impl IntoResponse {
     let value;
 
+    let state: &State = req.get_state().unwrap();
+
     {
-        let mut counter = req.state().lock().await;
+        let mut counter = state.lock().await;
         value = *counter;
         *counter += 1;
     }
@@ -23,7 +25,7 @@ async fn request_handler(req: Request<State>) -> impl IntoResponse {
     ))
 }
 
-async fn not_found(req: Request<State>) -> impl IntoResponse {
+async fn not_found(req: Request) -> impl IntoResponse {
     println!("handler not found for {}", req.uri().path());
     http::StatusCode::NOT_FOUND
 }
@@ -60,33 +62,27 @@ async fn main() {
 
     app.attach("/v2/posts/", posts_router()).unwrap();
 
-    app.set_not_found(not_found);
+    app.handle_not_found(not_found);
 
     app.run(&addr).await.unwrap();
 }
 
-fn posts_router() -> Router<State> {
+fn posts_router() -> Router {
     let mut posts = Router::new();
 
-    posts.register(
-        http::Method::GET,
-        "/new",
-        |req: Request<State>| async move { format!("on /posts/new, {}", req.path()) },
-    );
+    posts.register(http::Method::GET, "/new", |req: Request| async move {
+        format!("on /posts/new, {}", req.path())
+    });
 
-    posts.register(
-        http::Method::GET,
-        "/edit",
-        |req: Request<State>| async move { format!("on /posts/edit, {}", req.path()) },
-    );
+    posts.register(http::Method::GET, "/edit", |req: Request| async move {
+        format!("on /posts/edit, {}", req.path())
+    });
 
-    posts.register(
-        http::Method::GET,
-        "/delete",
-        |req: Request<State>| async move { format!("on /posts/delete, {}", req.path()) },
-    );
+    posts.register(http::Method::GET, "/delete", |req: Request| async move {
+        format!("on /posts/delete, {}", req.path())
+    });
 
-    posts.set_not_found(|_req| async move {
+    posts.set_not_found_handler(|_req| async move {
         let resp = lieweb::html("posts handler Not Found");
         lieweb::with_status(resp, http::StatusCode::NOT_FOUND)
     });

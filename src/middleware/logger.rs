@@ -13,12 +13,8 @@ impl RequestLogger {
         Self::default()
     }
 
-    async fn log_basic<'a, State: Send + Sync + 'static>(
-        &'a self,
-        ctx: Request<State>,
-        next: Next<'a, State>,
-    ) -> Response {
-        let path = ctx.path().to_owned();
+    async fn log_basic<'a>(&'a self, ctx: Request, next: Next<'a>) -> Response {
+        let path = ctx.uri().path().to_owned();
         let method = ctx.method().as_str().to_owned();
         let remote_addr = ctx.remote_addr();
         log::trace!("IN => {} {}, From {:?}", method, path, remote_addr);
@@ -36,8 +32,8 @@ impl RequestLogger {
     }
 }
 
-impl<State: Send + Sync + 'static> Middleware<State> for RequestLogger {
-    fn handle<'a>(&'a self, ctx: Request<State>, next: Next<'a, State>) -> BoxFuture<'a, Response> {
+impl Middleware for RequestLogger {
+    fn handle<'a>(&'a self, ctx: Request, next: Next<'a>) -> BoxFuture<'a, Response> {
         Box::pin(async move { self.log_basic(ctx, next).await })
     }
 }

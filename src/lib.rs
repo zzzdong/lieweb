@@ -9,6 +9,7 @@ mod server;
 mod utils;
 
 pub use error::Error;
+pub use request::HyperRequest;
 pub use request::Request;
 pub use response::*;
 pub use router::Router;

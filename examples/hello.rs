@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use lieweb::{http, middleware, App, Error, IntoResponse, Request};
+use lieweb::{http, middleware, App, IntoResponse, Request, Error};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
@@ -13,11 +13,13 @@ struct HelloMessage {
 
 type State = Arc<Mutex<u64>>;
 
-async fn request_handler(req: Request<State>) -> impl IntoResponse {
+async fn request_handler(req: Request) -> impl IntoResponse {
     let value;
 
+    let state = req.get_state::<State>().unwrap();
+
     {
-        let mut counter = req.state().lock().await;
+        let mut counter = state.lock().await;
         value = *counter;
         *counter += 1;
     }
@@ -29,37 +31,12 @@ async fn request_handler(req: Request<State>) -> impl IntoResponse {
     ))
 }
 
-async fn not_found(req: Request<State>) -> impl IntoResponse {
+async fn not_found(req: Request) -> impl IntoResponse {
     println!("handler not found for {}", req.uri().path());
     http::StatusCode::NOT_FOUND
 }
 
-async fn handle_form_data(mut req: Request<State>) -> Result<String, Error> {
-    let mut multipart = req.read_multipartform().await?;
-
-    multipart
-        .foreach_entry(|mut entry| {
-            println!("form field name: {:?}", entry.headers.name);
-            let filename = entry.headers.filename.unwrap_or("unknown.txt".to_string());
-            let filepath = format!("./{}-{}", entry.headers.name, filename);
-            match entry
-                .data
-                .save()
-                .size_limit(8 * 1024 * 1024)
-                .memory_threshold(0)
-                .with_path(&filepath)
-                .into_result_strict()
-            {
-                Ok(f) => println!("save file {:?}, {:?}", filepath, f),
-                Err(e) => println!("write form data failed, error: {:?}", e),
-            }
-        })
-        .unwrap();
-
-    Ok("ok".to_string())
-}
-
-async fn handle_form_urlencoded(mut req: Request<State>) -> Result<impl IntoResponse, Error> {
+async fn handle_form_urlencoded(mut req: Request) -> Result<impl IntoResponse, Error> {
     let form: serde_json::Value = req.read_form().await?;
 
     println!("form=> {:?}", form);
@@ -101,15 +78,14 @@ async fn main() {
         lieweb::response::json(&msg)
     });
 
-    app.post("/form-data", handle_form_data);
     app.post("/form-urlencoded", handle_form_urlencoded);
 
-    app.post("/posts/:id/edit", |req: Request<State>| async move {
+    app.post("/posts/:id/edit", |req: Request| async move {
         let id: u32 = req.get_param("id").unwrap();
         format!("you are editing post<{}>", id)
     });
 
-    app.set_not_found(not_found);
+    app.handle_not_found(not_found);
 
     app.run(&addr).await.unwrap();
 }

@@ -45,11 +45,7 @@ impl DefaultHeaders {
         };
     }
 
-    async fn append_header<'a, State: Send + Sync + 'static>(
-        &'a self,
-        ctx: Request<State>,
-        next: Next<'a, State>,
-    ) -> Response {
+    async fn append_header<'a>(&'a self, ctx: Request, next: Next<'a>) -> Response {
         let mut resp: Response = next.run(ctx).await;
 
         let headers = resp.headers_mut();
@@ -61,8 +57,8 @@ impl DefaultHeaders {
     }
 }
 
-impl<State: Send + Sync + 'static> Middleware<State> for DefaultHeaders {
-    fn handle<'a>(&'a self, ctx: Request<State>, next: Next<'a, State>) -> BoxFuture<'a, Response> {
+impl Middleware for DefaultHeaders {
+    fn handle<'a>(&'a self, ctx: Request, next: Next<'a>) -> BoxFuture<'a, Response> {
         Box::pin(async move { self.append_header(ctx, next).await })
     }
 }
