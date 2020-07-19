@@ -7,6 +7,8 @@ mod router;
 mod server;
 mod tls;
 mod utils;
+#[cfg(test)]
+mod test;
 
 pub use error::Error;
 pub use request::HyperRequest;
