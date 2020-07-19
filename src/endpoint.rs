@@ -6,43 +6,43 @@ use futures::future::BoxFuture;
 use crate::router::Router;
 use crate::{IntoResponse, Request, Response};
 
-pub(crate) type DynEndpoint<State> = dyn Endpoint<State>;
+pub(crate) type DynEndpoint = dyn Endpoint;
 
-pub trait Endpoint<State>: Send + Sync + 'static {
+pub trait Endpoint: Send + Sync + 'static {
     /// Invoke the endpoint within the given context
-    fn call<'a>(&'a self, req: Request<State>) -> BoxFuture<'a, Response>;
+    fn call(&self, req: Request) -> BoxFuture<'_, Response>;
 }
 
-impl<State, F: Send + Sync + 'static, Fut> Endpoint<State> for F
+impl<F: Send + Sync + 'static, Fut> Endpoint for F
 where
-    F: Fn(Request<State>) -> Fut,
+    F: Fn(Request) -> Fut,
     Fut: Future + Send + 'static,
     Fut::Output: IntoResponse,
 {
-    fn call<'a>(&'a self, req: Request<State>) -> BoxFuture<'a, Response> {
+    fn call(&self, req: Request) -> BoxFuture<'_, Response> {
         let fut = (self)(req);
         Box::pin(async move { fut.await.into_response() })
     }
 }
 
-pub(crate) struct RouterEndpoint<State> {
-    router: Arc<Router<State>>,
+pub(crate) struct RouterEndpoint {
+    router: Arc<Router>,
 }
 
-impl<State> RouterEndpoint<State> {
-    pub(crate) fn new(router: Arc<Router<State>>) -> RouterEndpoint<State> {
+impl RouterEndpoint {
+    pub(crate) fn new(router: Arc<Router>) -> RouterEndpoint {
         RouterEndpoint { router }
     }
 }
 
-impl<State: Send + Sync + 'static> Endpoint<State> for RouterEndpoint<State> {
-    fn call<'a>(&'a self, req: Request<State>) -> BoxFuture<'a, Response> {
+impl Endpoint for RouterEndpoint {
+    fn call(&self, req: Request) -> BoxFuture<'_, Response> {
         let fut = self.router.route(req);
         Box::pin(async move { fut.await.into_response() })
     }
 }
 
-impl<State: Send + Sync + 'static> std::fmt::Debug for RouterEndpoint<State> {
+impl std::fmt::Debug for RouterEndpoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "RouterEndpoint{{ router: {:?} }}", self.router)
     }

@@ -72,10 +72,11 @@ mod handlers {
     use super::State;
     use lieweb::{http::StatusCode, IntoResponse, Request, Response};
 
-    pub async fn list_todos(req: Request<State>) -> Result<Response, lieweb::Error> {
+    pub async fn list_todos(req: Request) -> Result<Response, lieweb::Error> {
         let opts: ListOptions = req.get_query()?;
 
-        let state = req.state().lock().await;
+        let state: &State = req.get_state()?;
+        let state = state.lock().await;
 
         let todos: Vec<Todo> = state
             .db
@@ -88,10 +89,11 @@ mod handlers {
         Ok(lieweb::json(&todos).into_response())
     }
 
-    pub async fn create_todo(mut req: Request<State>) -> Result<StatusCode, lieweb::Error> {
+    pub async fn create_todo(mut req: Request) -> Result<StatusCode, lieweb::Error> {
         let create: Todo = req.read_json().await?;
 
-        let mut state = req.state().lock().await;
+        let state: &State = req.get_state()?;
+        let mut state = state.lock().await;
 
         for todo in state.db.iter() {
             if todo.id == create.id {
@@ -106,12 +108,13 @@ mod handlers {
         Ok(StatusCode::CREATED)
     }
 
-    pub async fn update_todo(mut req: Request<State>) -> Result<StatusCode, lieweb::Error> {
+    pub async fn update_todo(mut req: Request) -> Result<StatusCode, lieweb::Error> {
         let todo_id: u64 = req.get_param("id")?;
 
         let update: Todo = req.read_json().await?;
 
-        let mut state = req.state().lock().await;
+        let state: &State = req.get_state()?;
+        let mut state = state.lock().await;
 
         for todo in state.db.iter_mut() {
             if todo.id == todo_id {
@@ -120,15 +123,16 @@ mod handlers {
             }
         }
 
-        log::debug!("    -> todo id not found!");
+        log::debug!("-> todo id not found!");
 
         Ok(StatusCode::NOT_FOUND)
     }
 
-    pub async fn delete_todo(req: Request<State>) -> Result<StatusCode, lieweb::Error> {
+    pub async fn delete_todo(req: Request) -> Result<StatusCode, lieweb::Error> {
         let todo_id: u64 = req.get_param("id")?;
 
-        let mut state = req.state().lock().await;
+        let state: &State = req.get_state()?;
+        let mut state = state.lock().await;
 
         let len = state.db.len();
         state.db.retain(|todo| todo.id != todo_id);

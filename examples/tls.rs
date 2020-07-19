@@ -1,6 +1,9 @@
+// generate tls cert
+// cd examples && openssl req -new -x509 -nodes -newkey rsa:4096 -keyout server.key -out server.crt -days 1095
+
 use std::sync::Arc;
 
-use lieweb::{http, middleware, App, IntoResponse, Request, Error};
+use lieweb::{http, middleware, App, Error, IntoResponse, Request};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
@@ -87,5 +90,12 @@ async fn main() {
 
     app.handle_not_found(not_found);
 
-    app.run(&addr).await.unwrap();
+    app.run_with_tls(
+        &addr,
+        "examples/server.crt",
+        "examples/abc.key",
+        None::<futures::future::Ready<()>>,
+    )
+    .await
+    .unwrap();
 }
