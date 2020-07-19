@@ -28,8 +28,9 @@ serde_json = "1.0"
 serde_urlencoded = "0.6.1"
 thiserror = "1.0"
 tokio = "0.2"
+tokio-rustls = "0.14"
 
 [dev-dependencies]
-env_logger = "0.6"
+env_logger = "0.7.1"
 tokio = { version="0.2", features=["full"] }
 serde = { version="1.0", features=["derive"] }

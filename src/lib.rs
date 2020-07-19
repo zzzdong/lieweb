@@ -5,7 +5,7 @@ mod request;
 pub mod response;
 mod router;
 mod server;
-#[allow(dead_code)]
+mod tls;
 mod utils;
 
 pub use error::Error;
@@ -19,3 +19,4 @@ pub use server::{server_id, App};
 pub use hyper;
 pub use hyper::http;
 pub use mime;
+pub use route_recognizer::Params;
