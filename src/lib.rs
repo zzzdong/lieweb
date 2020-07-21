@@ -5,10 +5,11 @@ mod request;
 pub mod response;
 mod router;
 mod server;
-mod tls;
-mod utils;
 #[cfg(test)]
 mod test;
+#[cfg(feature = "tls")]
+mod tls;
+mod utils;
 
 pub use error::Error;
 pub use request::HyperRequest;

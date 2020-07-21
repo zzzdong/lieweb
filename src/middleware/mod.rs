@@ -27,7 +27,7 @@ pub trait Middleware: 'static + Send + Sync {
 
 impl<F> Middleware for F
 where
-    F: Send + Sync + 'static + for<'a> Fn(Request, Next<'a>) -> BoxFuture<'a, Response>,
+    F: Fn(Request, Next<'_>) -> BoxFuture<'_, Response> + Send + Sync + 'static,
 {
     fn handle<'a>(&'a self, req: Request, next: Next<'a>) -> BoxFuture<'a, Response> {
         (self)(req, next)

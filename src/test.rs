@@ -28,6 +28,12 @@ fn test_server() {
         let mut server = App::new();
         server.get("/hello", |_req| async move { HELLO });
         let addr = "127.0.0.1:5000".parse().unwrap();
-        server.run_with_shutdown(&addr, Some(tokio::time::delay_for(std::time::Duration::from_secs(3)))).await.unwrap()
+        server
+            .run_with_shutdown(
+                &addr,
+                Some(tokio::time::delay_for(std::time::Duration::from_secs(3))),
+            )
+            .await
+            .unwrap()
     });
 }

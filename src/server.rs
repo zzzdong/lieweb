@@ -1,5 +1,6 @@
 use std::future::Future;
 use std::net::SocketAddr;
+#[cfg(feature = "tls")]
 use std::path::Path;
 use std::sync::Arc;
 
@@ -158,6 +159,7 @@ impl App {
         Ok(())
     }
 
+    #[cfg(feature = "tls")]
     pub async fn run_with_tls<F>(
         self,
         addr: &SocketAddr,

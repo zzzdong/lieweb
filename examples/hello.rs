@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use lieweb::{http, middleware, App, IntoResponse, Request, Error};
+use lieweb::{http, middleware, App, Error, IntoResponse, Request};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
