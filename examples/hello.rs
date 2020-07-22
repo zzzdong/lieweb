@@ -64,6 +64,7 @@ async fn main() {
     let mut default_headers = middleware::DefaultHeaders::new();
     default_headers.header(http::header::SERVER, lieweb::server_id());
 
+    app.middleware(middleware::RequestId::new());
     app.middleware(middleware::RequestLogger);
     app.middleware(default_headers);
 

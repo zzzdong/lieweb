@@ -1,10 +1,12 @@
 // import mod
 mod default_headers;
 mod logger;
+mod request_id;
 mod with_state;
 
 pub use default_headers::DefaultHeaders;
 pub use logger::RequestLogger;
+pub use request_id::RequestId;
 pub use with_state::WithState;
 
 use std::sync::Arc;

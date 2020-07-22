@@ -17,12 +17,20 @@ impl RequestLogger {
         let path = ctx.uri().path().to_owned();
         let method = ctx.method().as_str().to_owned();
         let remote_addr = ctx.remote_addr();
-        log::trace!("IN => {} {}, From {:?}", method, path, remote_addr);
+        let request_id = ctx.get_request_id();
+        log::trace!(
+            "IN =>{} {} {}, From {:?}",
+            request_id,
+            method,
+            path,
+            remote_addr
+        );
         let start = std::time::Instant::now();
         let res = next.run(ctx).await;
         let status = res.status();
         log::info!(
-            "{} {} {} {}ms",
+            "{} {} {} {} {}ms",
+            request_id,
             method,
             path,
             status.as_str(),

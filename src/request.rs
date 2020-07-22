@@ -79,7 +79,28 @@ impl Request {
             .extensions()
             .get::<Arc<T>>()
             .map(|o| o.as_ref())
-            .ok_or_else(|| crate::error_msg!("RequestContext not exist"))
+            .ok_or_else(|| crate::error_msg!("state{:?} not exist", std::any::type_name::<T>()))
+    }
+
+    pub fn get_extension<T>(&self) -> Option<&T>
+    where
+        T: Send + Sync + 'static + Clone,
+    {
+        self.request.extensions().get::<T>()
+    }
+
+    pub fn get_extension_mut<T>(&mut self) -> Option<&mut T>
+    where
+        T: Send + Sync + 'static + Clone,
+    {
+        self.request.extensions_mut().get_mut::<T>()
+    }
+
+    pub fn insert_extension<T>(&mut self, val: T)
+    where
+        T: Send + Sync + 'static + Clone,
+    {
+        self.request.extensions_mut().insert(val);
     }
 
     pub fn get_param<T>(&self, param: &str) -> Result<T, Error>
