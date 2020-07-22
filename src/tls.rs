@@ -49,9 +49,9 @@ impl TlsIncoming {
         let mut config = ServerConfig::new(NoClientAuth::new());
         let certs = certs(&mut BufReader::new(
             File::open(cert_path.as_ref())
-                .map_err(|e| wrap_io_error(e, "open cert file failed"))?,
+                .map_err(|e| crate::error_msg!("open cert file failed, err:{:?}", e))?,
         ))
-        .map_err(|e| wrap_io_error(e, "invalid cert"))?;
+        .map_err(|_| crate::error_msg!("invalid cert"))?;
 
         let mut key_vec = Vec::new();
         File::open(key_path.as_ref())?.read_to_end(&mut key_vec)?;
@@ -63,20 +63,17 @@ impl TlsIncoming {
             Ok(pkcs8) => pkcs8,
             Err(_e) => {
                 let mut reader = BufReader::new(key_vec.as_slice());
-                rsa_private_keys(&mut reader).map_err(|e| wrap_io_error(e, "invalid key"))?
+                rsa_private_keys(&mut reader).map_err(|_| crate::error_msg!("invalid key"))?
             }
         };
 
-        let key = keys.first().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "invalid key, not data".to_string(),
-            )
-        })?;
+        let key = keys
+            .first()
+            .ok_or_else(|| crate::error_msg!("invalid key, not data"))?;
 
         config
             .set_single_cert(certs, key.clone())
-            .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
+            .map_err(|e| crate::error_msg!("set tls cert failed, err: {:?}", e))?;
 
         Ok(config)
     }
@@ -189,11 +186,4 @@ impl AsyncWrite for TlsStream {
             State::Streaming(ref mut stream) => Pin::new(stream).poll_shutdown(cx),
         }
     }
-}
-
-fn wrap_io_error(e: io::Error, msg: &str) -> io::Error {
-    io::Error::new(
-        io::ErrorKind::InvalidInput,
-        format!("{}, err: {:?}", msg, e),
-    )
 }

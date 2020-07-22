@@ -7,12 +7,115 @@ use hyper::http::{
     StatusCode,
 };
 
-pub type Response = http::Response<hyper::Body>;
-// pub type HyperResponse = http::Response<hyper::Body>;
+pub type HyperResponse = http::Response<hyper::Body>;
 
 pub trait IntoResponse: Send + Sized {
     /// Convert the value into a `Response`.
     fn into_response(self) -> Response;
+}
+
+pub struct Response {
+    inner: HyperResponse,
+}
+
+impl Response {
+    pub fn new() -> Self {
+        StatusCode::OK.into_response()
+    }
+
+    pub fn html<T>(body: T) -> Self
+    where
+        hyper::Body: From<T>,
+        T: Send,
+    {
+        html(body).into_response()
+    }
+
+    pub fn json<T>(val: &T) -> Self
+    where
+        T: serde::Serialize,
+    {
+        json(val).into_response()
+    }
+
+    pub fn from_status(status: StatusCode) -> Self {
+        status.into_response()
+    }
+
+    pub fn with_status(&mut self, status: StatusCode) -> &mut Self {
+        *self.inner.status_mut() = status;
+        self
+    }
+
+    pub fn with_header<K, V>(&mut self, name: K, value: V) -> &mut Self
+    where
+        HeaderName: TryFrom<K>,
+        <HeaderName as TryFrom<K>>::Error: Into<http::Error>,
+        HeaderValue: TryFrom<V>,
+        <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
+    {
+        match <HeaderName as TryFrom<K>>::try_from(name) {
+            Ok(name) => match <HeaderValue as TryFrom<V>>::try_from(value) {
+                Ok(value) => {
+                    self.inner.headers_mut().insert(name, value);
+                }
+                Err(err) => {
+                    log::error!("with_header value error: {}", err.into());
+                }
+            },
+            Err(err) => {
+                log::error!("with_header name error: {}", err.into());
+            }
+        };
+
+        self
+    }
+
+    pub fn inner(&self) -> &HyperResponse {
+        &self.inner
+    }
+
+    pub fn inner_mut(&mut self) -> &mut HyperResponse {
+        &mut self.inner
+    }
+
+    pub fn status(&self) -> StatusCode {
+        self.inner.status()
+    }
+
+    pub fn status_mut(&mut self) -> &mut StatusCode {
+        self.inner.status_mut()
+    }
+
+    pub fn into_hyper_response(self) -> HyperResponse {
+        let Self { inner } = self;
+        inner
+    }
+}
+
+impl Default for Response {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl IntoResponse for Response {
+    fn into_response(self) -> Response {
+        self
+    }
+}
+
+impl From<HyperResponse> for Response {
+    fn from(inner: HyperResponse) -> Self {
+        Response { inner }
+    }
+}
+
+impl Into<HyperResponse> for Response {
+    fn into(self) -> HyperResponse {
+        let Response { inner } = self;
+        inner
+    }
 }
 
 pub struct Html<T> {
@@ -40,6 +143,7 @@ where
             )
             .body(hyper::Body::from(self.body))
             .unwrap()
+            .into()
     }
 }
 
@@ -58,7 +162,8 @@ where
 
 impl IntoResponse for Json {
     fn into_response(self) -> Response {
-        self.inner
+        let resp: Result<Response, _> = self
+            .inner
             .map(|j| {
                 http::Response::builder()
                     .header(
@@ -67,12 +172,14 @@ impl IntoResponse for Json {
                     )
                     .body(hyper::Body::from(j))
                     .unwrap()
+                    .into()
             })
             .map_err(|e| {
                 log::error!("json serialize failed, {:?}", e);
                 e
-            })
-            .into_response()
+            });
+
+        resp.into_response()
     }
 }
 
@@ -81,7 +188,7 @@ pub struct WithStatus<T> {
     status: StatusCode,
 }
 
-pub fn with_status<R: IntoResponse>(response: R, status: StatusCode) -> WithStatus<R> {
+pub fn with_status<T: IntoResponse>(response: T, status: StatusCode) -> WithStatus<T> {
     WithStatus { response, status }
 }
 
@@ -91,7 +198,7 @@ where
 {
     fn into_response(self) -> Response {
         let mut resp = self.response.into_response();
-        *resp.status_mut() = self.status;
+        *resp.inner.status_mut() = self.status;
         resp
     }
 }
@@ -133,7 +240,7 @@ where
     fn into_response(self) -> Response {
         let mut resp = self.response.into_response();
         if let Some((name, value)) = self.header {
-            resp.headers_mut().insert(name, value);
+            resp.inner.headers_mut().insert(name, value);
         }
         resp
     }
@@ -154,14 +261,9 @@ where
                     .status(StatusCode::INTERNAL_SERVER_ERROR)
                     .body(hyper::Body::from("Internal Server Error"))
                     .unwrap()
+                    .into()
             }
         }
-    }
-}
-
-impl IntoResponse for Response {
-    fn into_response(self) -> Response {
-        self
     }
 }
 
@@ -171,6 +273,7 @@ impl IntoResponse for StatusCode {
             .status(self)
             .body(hyper::Body::empty())
             .unwrap()
+            .into()
     }
 }
 
@@ -183,6 +286,7 @@ impl IntoResponse for String {
             )
             .body(hyper::Body::from(self))
             .unwrap()
+            .into()
     }
 }
 
@@ -195,6 +299,7 @@ impl IntoResponse for &'static str {
             )
             .body(hyper::Body::from(self))
             .unwrap()
+            .into()
     }
 }
 
@@ -217,6 +322,7 @@ impl IntoResponse for Vec<u8> {
             )
             .body(hyper::Body::from(self))
             .unwrap()
+            .into()
     }
 }
 
@@ -229,5 +335,6 @@ impl IntoResponse for &'static [u8] {
             )
             .body(hyper::Body::from(self))
             .unwrap()
+            .into()
     }
 }

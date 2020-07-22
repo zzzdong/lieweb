@@ -70,7 +70,7 @@ mod models {
 mod handlers {
     use super::models::*;
     use super::State;
-    use lieweb::{http::StatusCode, IntoResponse, Request, Response};
+    use lieweb::{http::StatusCode, Request, Response};
 
     pub async fn list_todos(req: Request) -> Result<Response, lieweb::Error> {
         let opts: ListOptions = req.get_query()?;
@@ -86,10 +86,10 @@ mod handlers {
             .take(opts.limit.unwrap_or(std::usize::MAX))
             .collect();
 
-        Ok(lieweb::json(&todos).into_response())
+        Ok(Response::json(&todos))
     }
 
-    pub async fn create_todo(mut req: Request) -> Result<StatusCode, lieweb::Error> {
+    pub async fn create_todo(mut req: Request) -> Result<Response, lieweb::Error> {
         let create: Todo = req.read_json().await?;
 
         let state: &State = req.get_state()?;
@@ -99,16 +99,16 @@ mod handlers {
             if todo.id == create.id {
                 log::debug!("    -> id already exists: {}", create.id);
                 // Todo with id already exists, return `400 BadRequest`.
-                return Ok(StatusCode::BAD_REQUEST);
+                return Ok(Response::from_status(StatusCode::BAD_REQUEST));
             }
         }
 
         state.db.push(create);
 
-        Ok(StatusCode::CREATED)
+        Ok(Response::from_status(StatusCode::CREATED))
     }
 
-    pub async fn update_todo(mut req: Request) -> Result<StatusCode, lieweb::Error> {
+    pub async fn update_todo(mut req: Request) -> Result<Response, lieweb::Error> {
         let todo_id: u64 = req.get_param("id")?;
 
         let update: Todo = req.read_json().await?;
@@ -119,16 +119,16 @@ mod handlers {
         for todo in state.db.iter_mut() {
             if todo.id == todo_id {
                 *todo = update;
-                return Ok(StatusCode::OK);
+                return Ok(Response::from_status(StatusCode::OK));
             }
         }
 
         log::debug!("-> todo id not found!");
 
-        Ok(StatusCode::NOT_FOUND)
+        Ok(Response::from_status(StatusCode::NOT_FOUND))
     }
 
-    pub async fn delete_todo(req: Request) -> Result<StatusCode, lieweb::Error> {
+    pub async fn delete_todo(req: Request) -> Result<Response, lieweb::Error> {
         let todo_id: u64 = req.get_param("id")?;
 
         let state: &State = req.get_state()?;
@@ -138,10 +138,10 @@ mod handlers {
         state.db.retain(|todo| todo.id != todo_id);
 
         if len != state.db.len() {
-            Ok(StatusCode::NO_CONTENT)
+            Ok(Response::from_status(StatusCode::NO_CONTENT))
         } else {
             log::debug!("    -> todo id not found!");
-            Ok(StatusCode::NOT_FOUND)
+            Ok(Response::from_status(StatusCode::NOT_FOUND))
         }
     }
 }

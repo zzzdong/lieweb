@@ -141,7 +141,7 @@ impl App {
                         let endpoint = RouterEndpoint::new(router);
                         let resp = endpoint.call(req).await;
 
-                        Ok::<_, Error>(resp)
+                        Ok::<_, Error>(resp.into())
                     }
                 }))
             }
@@ -191,7 +191,7 @@ impl App {
                         let endpoint = RouterEndpoint::new(router);
                         let resp = endpoint.call(req).await;
 
-                        Ok::<_, Error>(resp)
+                        Ok::<_, Error>(resp.into())
                     }
                 }))
             }
