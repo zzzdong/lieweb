@@ -46,7 +46,7 @@ async fn handle_form_urlencoded(mut req: Request) -> Result<impl IntoResponse, E
 
 #[tokio::main]
 async fn main() {
-    env_logger::init();
+    tracing_subscriber::fmt().init();
 
     let mut addr = DEFAULT_ADDR.to_string();
 

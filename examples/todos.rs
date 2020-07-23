@@ -22,7 +22,7 @@ pub type State = Arc<Mutex<AppState>>;
 
 #[tokio::main]
 async fn main() {
-    env_logger::init();
+    tracing_subscriber::fmt().init();
 
     let mut addr = DEFAULT_ADDR.to_string();
 
@@ -97,7 +97,7 @@ mod handlers {
 
         for todo in state.db.iter() {
             if todo.id == create.id {
-                log::debug!("    -> id already exists: {}", create.id);
+                tracing::debug!("    -> id already exists: {}", create.id);
                 // Todo with id already exists, return `400 BadRequest`.
                 return Ok(Response::from_status(StatusCode::BAD_REQUEST));
             }
@@ -123,7 +123,7 @@ mod handlers {
             }
         }
 
-        log::debug!("-> todo id not found!");
+        tracing::debug!("-> todo id not found!");
 
         Ok(Response::from_status(StatusCode::NOT_FOUND))
     }
@@ -140,7 +140,7 @@ mod handlers {
         if len != state.db.len() {
             Ok(Response::from_status(StatusCode::NO_CONTENT))
         } else {
-            log::debug!("    -> todo id not found!");
+            tracing::debug!("    -> todo id not found!");
             Ok(Response::from_status(StatusCode::NOT_FOUND))
         }
     }

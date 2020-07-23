@@ -30,19 +30,14 @@ impl DefaultHeaders {
         HeaderValue: TryFrom<V>,
         <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
     {
-        match <HeaderName as TryFrom<K>>::try_from(name) {
-            Ok(name) => match <HeaderValue as TryFrom<V>>::try_from(value) {
-                Ok(value) => {
-                    self.headers.insert(name, value);
-                }
-                Err(err) => {
-                    log::error!("DefaultHeaders.header(), value error: {}", err.into());
-                }
-            },
-            Err(err) => {
-                log::error!("DefaultHeaders.header(),  name error: {}", err.into());
+        match crate::utils::parse_header(name, value) {
+            Ok((name, value)) => {
+                self.headers.insert(name, value);
             }
-        };
+            Err(e) => {
+                tracing::error!("DefaultHeaders.header error: {}", e);
+            }
+        }
     }
 
     async fn append_header<'a>(&'a self, ctx: Request, next: Next<'a>) -> Response {

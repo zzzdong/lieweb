@@ -54,19 +54,14 @@ impl Response {
         HeaderValue: TryFrom<V>,
         <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
     {
-        match <HeaderName as TryFrom<K>>::try_from(name) {
-            Ok(name) => match <HeaderValue as TryFrom<V>>::try_from(value) {
-                Ok(value) => {
-                    self.inner.headers_mut().insert(name, value);
-                }
-                Err(err) => {
-                    log::error!("with_header value error: {}", err.into());
-                }
-            },
-            Err(err) => {
-                log::error!("with_header name error: {}", err.into());
+        match crate::utils::parse_header(name, value) {
+            Ok((name, value)) => {
+                self.inner.headers_mut().insert(name, value);
             }
-        };
+            Err(e) => {
+                tracing::error!("with_header error: {}", e);
+            }
+        }
 
         self
     }
@@ -175,7 +170,7 @@ impl IntoResponse for Json {
                     .into()
             })
             .map_err(|e| {
-                log::error!("json serialize failed, {:?}", e);
+                tracing::error!("json serialize failed, {:?}", e);
                 e
             });
 
@@ -216,16 +211,10 @@ where
     HeaderValue: TryFrom<V>,
     <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
 {
-    let header = match <HeaderName as TryFrom<K>>::try_from(name) {
-        Ok(name) => match <HeaderValue as TryFrom<V>>::try_from(value) {
-            Ok(value) => Some((name, value)),
-            Err(err) => {
-                log::error!("with_header value error: {}", err.into());
-                None
-            }
-        },
-        Err(err) => {
-            log::error!("with_header name error: {}", err.into());
+    let header = match crate::utils::parse_header(name, value) {
+        Ok(h) => Some(h),
+        Err(e) => {
+            tracing::error!("with_header error: {}", e);
             None
         }
     };
@@ -255,7 +244,7 @@ where
         match self {
             Ok(r) => r.into_response(),
             Err(e) => {
-                log::error!("on Result<R, E>, error: {:?}", e);
+                tracing::error!("on Result<R, E>, error: {:?}", e);
 
                 http::Response::builder()
                     .status(StatusCode::INTERNAL_SERVER_ERROR)
