@@ -8,34 +8,18 @@ use crate::{
 
 use futures::future::BoxFuture;
 
+const RANDOM_STRING_LEN: usize = 6;
+
 #[derive(Debug, Clone)]
 pub struct RequestId {
     count: Arc<AtomicU64>,
-    prefix: String,
 }
 
 impl RequestId {
     pub fn new() -> Self {
         let count = Arc::new(AtomicU64::new(0));
-        let bs = rand::random::<[u8; 4]>();
-        let ss: Vec<String> = bs.iter().map(|b| format!("{:2X}", b)).collect();
-        let prefix = ss.join("");
 
-        RequestId { count, prefix }
-    }
-
-    pub fn with_prefix(prefix: Option<impl AsRef<str>>) -> Self {
-        let count = Arc::new(AtomicU64::new(0));
-        let prefix = match prefix {
-            Some(s) => s.as_ref().to_string(),
-            None => {
-                let bs = rand::random::<[u8; 8]>();
-                let ss: Vec<String> = bs.iter().map(|b| format!("{:2X}", b)).collect();
-                ss.join("")
-            }
-        };
-
-        RequestId { count, prefix }
+        RequestId { count }
     }
 }
 
@@ -50,7 +34,7 @@ impl Middleware for RequestId {
         Box::pin(async move {
             let id = self.count.fetch_add(1, Ordering::SeqCst);
 
-            let value = format!("{}_{}", self.prefix, id);
+            let value = format!("{}-{}", crate::utils::gen_random_string(RANDOM_STRING_LEN), id);
             let val = RequestIdValue::new(value);
             ctx.insert_extension(val);
 
@@ -71,8 +55,8 @@ impl RequestIdValue {
 }
 
 impl Request {
-    pub fn get_request_id(&self) -> String {
+    pub fn get_request_id(&self) -> &str {
         let val = self.get_extension::<RequestIdValue>();
-        val.map(|v| v.value.clone()).unwrap_or_default()
+        val.map(|v| v.value.as_str()).unwrap_or_default()
     }
 }
