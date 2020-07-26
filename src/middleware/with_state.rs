@@ -18,7 +18,7 @@ impl<T: Send + Sync + 'static> WithState<T> {
     }
 
     async fn append_extension<'a>(&'a self, mut ctx: Request, next: Next<'a>) -> Response {
-        ctx.request.extensions_mut().insert(self.extension.clone());
+        ctx.insert_extension(self.extension.clone());
         next.run(ctx).await
     }
 }

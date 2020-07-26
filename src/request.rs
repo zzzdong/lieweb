@@ -15,7 +15,7 @@ pub type HyperRequest = hyper::Request<hyper::Body>;
 use crate::Error;
 
 pub struct Request {
-    pub(crate) request: HyperRequest,
+    pub(crate) inner: HyperRequest,
     params: Params,
     remote_addr: SocketAddr,
     route_path: Option<String>,
@@ -24,7 +24,7 @@ pub struct Request {
 impl Request {
     pub(crate) fn new(request: HyperRequest, remote_addr: SocketAddr) -> Self {
         Request {
-            request,
+            inner: request,
             params: Params::new(),
             remote_addr,
             route_path: None,
@@ -32,27 +32,27 @@ impl Request {
     }
 
     pub fn inner(&self) -> &HyperRequest {
-        &self.request
+        &self.inner
     }
 
     pub fn innner_mut(&mut self) -> &mut HyperRequest {
-        &mut self.request
+        &mut self.inner
     }
 
     pub fn headers(&self) -> &HeaderMap<HeaderValue> {
-        self.request.headers()
+        self.inner.headers()
     }
 
     pub fn headers_mut(&mut self) -> &mut HeaderMap<HeaderValue> {
-        self.request.headers_mut()
+        self.inner.headers_mut()
     }
 
     pub fn method(&self) -> &http::Method {
-        self.request.method()
+        self.inner.method()
     }
 
     pub fn uri(&self) -> &http::Uri {
-        self.request.uri()
+        self.inner.uri()
     }
 
     pub fn path(&self) -> &str {
@@ -60,7 +60,7 @@ impl Request {
     }
 
     pub fn version(&self) -> http::Version {
-        self.request.version()
+        self.inner.version()
     }
 
     pub fn remote_addr(&self) -> SocketAddr {
@@ -75,7 +75,7 @@ impl Request {
     where
         T: Send + Sync + 'static + Clone,
     {
-        self.request
+        self.inner
             .extensions()
             .get::<Arc<T>>()
             .map(|o| o.as_ref())
@@ -86,21 +86,21 @@ impl Request {
     where
         T: Send + Sync + 'static + Clone,
     {
-        self.request.extensions().get::<T>()
+        self.inner.extensions().get::<T>()
     }
 
     pub fn get_extension_mut<T>(&mut self) -> Option<&mut T>
     where
         T: Send + Sync + 'static + Clone,
     {
-        self.request.extensions_mut().get_mut::<T>()
+        self.inner.extensions_mut().get_mut::<T>()
     }
 
     pub fn insert_extension<T>(&mut self, val: T)
     where
         T: Send + Sync + 'static + Clone,
     {
-        self.request.extensions_mut().insert(val);
+        self.inner.extensions_mut().insert(val);
     }
 
     pub fn get_param<T>(&self, param: &str) -> Result<T, Error>
@@ -122,7 +122,7 @@ impl Request {
     {
         let key: HeaderName = header.into();
         let value = self
-            .request
+            .inner
             .headers()
             .get(key)
             .ok_or_else(|| crate::error_msg!("Header not found"))?;
@@ -131,7 +131,7 @@ impl Request {
     }
 
     pub fn get_query<T: DeserializeOwned + Default>(&self) -> Result<T, Error> {
-        match self.request.uri().query() {
+        match self.inner.uri().query() {
             Some(query) => serde_urlencoded::from_str(query).map_err(Error::from),
             None => Ok(Default::default()),
         }
@@ -140,7 +140,7 @@ impl Request {
     pub async fn read_body(&mut self) -> Result<Bytes, Error> {
         let mut bufs = BytesMut::new();
 
-        while let Some(buf) = self.request.body_mut().data().await {
+        while let Some(buf) = self.inner.body_mut().data().await {
             let buf = buf?;
             if buf.has_remaining() {
                 bufs.extend(buf);
@@ -167,7 +167,7 @@ impl Request {
     pub(crate) fn route_path(&self) -> &str {
         match self.route_path {
             Some(ref path) => path,
-            None => self.request.uri().path(),
+            None => self.inner.uri().path(),
         }
     }
 

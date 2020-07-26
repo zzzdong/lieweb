@@ -41,7 +41,7 @@ impl DefaultHeaders {
     async fn append_header<'a>(&'a self, ctx: Request, next: Next<'a>) -> Response {
         let mut resp: Response = next.run(ctx).await;
 
-        let headers = resp.inner_mut().headers_mut();
+        let headers = resp.headers_mut();
         for (k, v) in &self.headers {
             headers.append(k, v.clone());
         }

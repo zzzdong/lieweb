@@ -3,7 +3,7 @@ use std::convert::TryFrom;
 
 use hyper::http::{
     self,
-    header::{HeaderName, HeaderValue},
+    header::{HeaderMap, HeaderName, HeaderValue},
     StatusCode,
 };
 
@@ -15,15 +15,19 @@ pub trait IntoResponse: Send + Sized {
 }
 
 pub struct Response {
-    inner: HyperResponse,
+    pub(crate) inner: HyperResponse,
 }
 
 impl Response {
     pub fn new() -> Self {
-        StatusCode::OK.into_response()
+        Self::with_status(StatusCode::OK)
     }
 
-    pub fn html<T>(body: T) -> Self
+    pub fn with_status(status: StatusCode) -> Self {
+        status.into_response()
+    }
+
+    pub fn with_html<T>(body: T) -> Self
     where
         hyper::Body: From<T>,
         T: Send,
@@ -31,23 +35,60 @@ impl Response {
         html(body).into_response()
     }
 
-    pub fn json<T>(val: &T) -> Self
+    pub fn with_json<T>(val: &T) -> Self
     where
         T: serde::Serialize,
     {
         json(val).into_response()
     }
 
-    pub fn from_status(status: StatusCode) -> Self {
-        status.into_response()
+    pub fn with_bytes(val: &'static [u8]) -> Self {
+        val.into_response()
     }
 
-    pub fn with_status(&mut self, status: StatusCode) -> &mut Self {
+    pub fn with_bytes_vec(val: Vec<u8>) -> Self {
+        val.into_response()
+    }
+
+    pub fn with_str(s: &'static str) -> Self {
+        s.into_response()
+    }
+
+    pub fn with_string(s: String) -> Self {
+        s.into_response()
+    }
+
+    pub fn inner(&self) -> &HyperResponse {
+        &self.inner
+    }
+
+    pub fn inner_mut(&mut self) -> &mut HyperResponse {
+        &mut self.inner
+    }
+
+    pub fn status(&self) -> StatusCode {
+        self.inner.status()
+    }
+
+    pub fn headers(&self) -> &HeaderMap<HeaderValue> {
+        self.inner.headers()
+    }
+
+    pub fn headers_mut(&mut self) -> &mut HeaderMap<HeaderValue> {
+        self.inner.headers_mut()
+    }
+
+    pub fn into_hyper_response(self) -> HyperResponse {
+        let Self { inner } = self;
+        inner
+    }
+
+    pub fn set_status(mut self, status: StatusCode) -> Self {
         *self.inner.status_mut() = status;
         self
     }
 
-    pub fn with_header<K, V>(&mut self, name: K, value: V) -> &mut Self
+    pub fn insert_header<K, V>(mut self, name: K, value: V) -> Self
     where
         HeaderName: TryFrom<K>,
         <HeaderName as TryFrom<K>>::Error: Into<http::Error>,
@@ -65,27 +106,6 @@ impl Response {
 
         self
     }
-
-    pub fn inner(&self) -> &HyperResponse {
-        &self.inner
-    }
-
-    pub fn inner_mut(&mut self) -> &mut HyperResponse {
-        &mut self.inner
-    }
-
-    pub fn status(&self) -> StatusCode {
-        self.inner.status()
-    }
-
-    pub fn status_mut(&mut self) -> &mut StatusCode {
-        self.inner.status_mut()
-    }
-
-    pub fn into_hyper_response(self) -> HyperResponse {
-        let Self { inner } = self;
-        inner
-    }
 }
 
 impl Default for Response {
@@ -101,8 +121,8 @@ impl IntoResponse for Response {
 }
 
 impl From<HyperResponse> for Response {
-    fn from(inner: HyperResponse) -> Self {
-        Response { inner }
+    fn from(response: HyperResponse) -> Self {
+        Response { inner: response }
     }
 }
 
@@ -110,6 +130,39 @@ impl Into<HyperResponse> for Response {
     fn into(self) -> HyperResponse {
         let Response { inner } = self;
         inner
+    }
+}
+
+impl From<&'static [u8]> for Response {
+    fn from(val: &'static [u8]) -> Self {
+        val.into_response()
+    }
+}
+
+impl From<Vec<u8>> for Response {
+    fn from(val: Vec<u8>) -> Self {
+        val.into_response()
+    }
+}
+
+impl From<&'static str> for Response {
+    fn from(val: &'static str) -> Self {
+        val.into_response()
+    }
+}
+
+impl From<String> for Response {
+    fn from(val: String) -> Self {
+        val.into_response()
+    }
+}
+
+impl From<Cow<'static, str>> for Response {
+    fn from(val: Cow<'static, str>) -> Self {
+        match val {
+            Cow::Borrowed(s) => s.into_response(),
+            Cow::Owned(s) => s.into_response(),
+        }
     }
 }
 

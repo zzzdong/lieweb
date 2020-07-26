@@ -86,7 +86,7 @@ mod handlers {
             .take(opts.limit.unwrap_or(std::usize::MAX))
             .collect();
 
-        Ok(Response::json(&todos))
+        Ok(Response::with_json(&todos))
     }
 
     pub async fn create_todo(mut req: Request) -> Result<Response, lieweb::Error> {
@@ -99,13 +99,13 @@ mod handlers {
             if todo.id == create.id {
                 tracing::debug!("    -> id already exists: {}", create.id);
                 // Todo with id already exists, return `400 BadRequest`.
-                return Ok(Response::from_status(StatusCode::BAD_REQUEST));
+                return Ok(Response::with_status(StatusCode::BAD_REQUEST));
             }
         }
 
         state.db.push(create);
 
-        Ok(Response::from_status(StatusCode::CREATED))
+        Ok(Response::with_status(StatusCode::CREATED))
     }
 
     pub async fn update_todo(mut req: Request) -> Result<Response, lieweb::Error> {
@@ -119,13 +119,13 @@ mod handlers {
         for todo in state.db.iter_mut() {
             if todo.id == todo_id {
                 *todo = update;
-                return Ok(Response::from_status(StatusCode::OK));
+                return Ok(Response::with_status(StatusCode::OK));
             }
         }
 
         tracing::debug!("-> todo id not found!");
 
-        Ok(Response::from_status(StatusCode::NOT_FOUND))
+        Ok(Response::with_status(StatusCode::NOT_FOUND))
     }
 
     pub async fn delete_todo(req: Request) -> Result<Response, lieweb::Error> {
@@ -138,10 +138,10 @@ mod handlers {
         state.db.retain(|todo| todo.id != todo_id);
 
         if len != state.db.len() {
-            Ok(Response::from_status(StatusCode::NO_CONTENT))
+            Ok(Response::with_status(StatusCode::NO_CONTENT))
         } else {
             tracing::debug!("    -> todo id not found!");
-            Ok(Response::from_status(StatusCode::NOT_FOUND))
+            Ok(Response::with_status(StatusCode::NOT_FOUND))
         }
     }
 }
