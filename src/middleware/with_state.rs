@@ -23,7 +23,7 @@ impl<T: Send + Sync + 'static> WithState<T> {
     }
 }
 
-#[async_trait::async_trait]
+#[crate::async_trait]
 impl<T: Send + Sync + 'static + Clone> Middleware for WithState<T> {
     async fn handle<'a>(&'a self, ctx: Request, next: Next<'a>) -> Response {
         self.append_extension(ctx, next).await

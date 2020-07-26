@@ -16,7 +16,7 @@ use crate::endpoint::DynEndpoint;
 use crate::{Request, Response};
 
 /// Middleware that wraps around remaining middleware chain.
-#[async_trait::async_trait]
+#[crate::async_trait]
 pub trait Middleware: 'static + Send + Sync {
     /// Asynchronously handle the request, and return a response.
     async fn handle<'a>(&'a self, cx: Request, next: Next<'a>) -> Response;
@@ -27,11 +27,11 @@ pub trait Middleware: 'static + Send + Sync {
     }
 }
 
-#[async_trait::async_trait]
+#[crate::async_trait]
 impl<F, Fut> Middleware for F
 where
     F: Fn(Request, Next<'_>) -> Fut + Send + Sync + 'static,
-    Fut: Future<Output = Response> + Send + Sync + 'static,
+    Fut: Future<Output = Response> + Send + 'static,
 {
     async fn handle<'a>(&'a self, cx: Request, next: Next<'a>) -> Response {
         (self)(cx, next).await

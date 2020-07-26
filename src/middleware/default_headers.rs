@@ -50,7 +50,7 @@ impl DefaultHeaders {
     }
 }
 
-#[async_trait::async_trait]
+#[crate::async_trait]
 impl Middleware for DefaultHeaders {
     async fn handle<'a>(&'a self, ctx: Request, next: Next<'a>) -> Response {
         self.append_header(ctx, next).await

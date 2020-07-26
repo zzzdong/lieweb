@@ -25,7 +25,6 @@ futures = "0.3"
 futures-util = "0.3"
 hyper = "0.13"
 lazy_static = "1.4"
-tracing = "0.1"
 mime = "0.3"
 rand = "0.7"
 route-recognizer = "0.2"
@@ -35,6 +34,7 @@ serde_urlencoded = "0.6.1"
 thiserror = "1.0"
 tokio = "0.2"
 tokio-rustls = { version="0.14", optional=true }
+tracing = "0.1"
 
 [dev-dependencies]
 tracing-subscriber = "0.2"

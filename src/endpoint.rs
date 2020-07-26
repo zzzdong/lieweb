@@ -6,13 +6,13 @@ use crate::{IntoResponse, Request, Response};
 
 pub(crate) type DynEndpoint = dyn Endpoint;
 
-#[async_trait::async_trait]
+#[crate::async_trait]
 pub trait Endpoint: Send + Sync + 'static {
     /// Invoke the endpoint within the given context
     async fn call(&self, req: Request) -> Response;
 }
 
-#[async_trait::async_trait]
+#[crate::async_trait]
 impl<F: Send + Sync + 'static, Fut> Endpoint for F
 where
     F: Fn(Request) -> Fut,
@@ -35,7 +35,7 @@ impl RouterEndpoint {
     }
 }
 
-#[async_trait::async_trait]
+#[crate::async_trait]
 impl Endpoint for RouterEndpoint {
     async fn call(&self, req: Request) -> Response {
         let resp = self.router.route(req).await;

@@ -38,7 +38,7 @@ impl RequestLogger {
     }
 }
 
-#[async_trait::async_trait]
+#[crate::async_trait]
 impl Middleware for RequestLogger {
     async fn handle<'a>(&'a self, ctx: Request, next: Next<'a>) -> Response {
         self.log_basic(ctx, next).await

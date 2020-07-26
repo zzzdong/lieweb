@@ -27,7 +27,7 @@ impl Default for RequestId {
     }
 }
 
-#[async_trait::async_trait]
+#[crate::async_trait]
 impl Middleware for RequestId {
     async fn handle<'a>(&'a self, mut ctx: Request, next: Next<'a>) -> Response {
         let id = self.count.fetch_add(1, Ordering::SeqCst);
