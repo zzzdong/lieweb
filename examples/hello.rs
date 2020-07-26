@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use lieweb::{http, middleware, App, Error, IntoResponse, Request};
+use lieweb::{http, middleware, App, Error, Request, Response};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
@@ -13,7 +13,7 @@ struct HelloMessage {
 
 type State = Arc<Mutex<u64>>;
 
-async fn request_handler(req: Request) -> impl IntoResponse {
+async fn request_handler(req: Request) -> Response {
     let value;
 
     let state = req.get_state::<State>().unwrap();
@@ -24,24 +24,24 @@ async fn request_handler(req: Request) -> impl IntoResponse {
         *counter += 1;
     }
 
-    lieweb::html(format!(
+    Response::with_html(format!(
         "got request#{} from {:?}",
         value,
         req.remote_addr()
     ))
 }
 
-async fn not_found(req: Request) -> impl IntoResponse {
+async fn not_found(req: Request) -> Response {
     println!("handler not found for {}", req.uri().path());
-    http::StatusCode::NOT_FOUND
+    Response::with_status(http::StatusCode::NOT_FOUND)
 }
 
-async fn handle_form_urlencoded(mut req: Request) -> Result<impl IntoResponse, Error> {
+async fn handle_form_urlencoded(mut req: Request) -> Result<Response, Error> {
     let form: serde_json::Value = req.read_form().await?;
 
     println!("form=> {:?}", form);
 
-    Ok(lieweb::json(&form))
+    Ok(Response::with_json(&form))
 }
 
 #[tokio::main]
@@ -76,7 +76,7 @@ async fn main() {
         let msg = HelloMessage {
             message: "hello, world!".to_owned(),
         };
-        lieweb::response::json(&msg)
+        Response::with_json(&msg)
     });
 
     app.post("/form-urlencoded", handle_form_urlencoded);

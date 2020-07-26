@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use lieweb::{http, middleware, App, Error, IntoResponse, Request};
+use lieweb::{http, middleware, App, Error, Request};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
@@ -16,7 +16,7 @@ struct HelloMessage {
 
 type State = Arc<Mutex<u64>>;
 
-async fn request_handler(req: Request) -> impl IntoResponse {
+async fn request_handler(req: Request) -> Response {
     let value;
 
     let state = req.get_state::<State>().unwrap();
@@ -34,12 +34,12 @@ async fn request_handler(req: Request) -> impl IntoResponse {
     ))
 }
 
-async fn not_found(req: Request) -> impl IntoResponse {
+async fn not_found(req: Request) -> Response {
     println!("handler not found for {}", req.uri().path());
     http::StatusCode::NOT_FOUND
 }
 
-async fn handle_form_urlencoded(mut req: Request) -> Result<impl IntoResponse, Error> {
+async fn handle_form_urlencoded(mut req: Request) -> Result<Response, Error> {
     let form: serde_json::Value = req.read_form().await?;
 
     println!("form=> {:?}", form);

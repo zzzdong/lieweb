@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use lieweb::{http, middleware, App, IntoResponse, Request, Router};
+use lieweb::{http, middleware, App, Request, Response, Router};
 use tokio::sync::Mutex;
 
 const DEFAULT_ADDR: &str = "127.0.0.1:5000";
 
 type State = Arc<Mutex<u64>>;
 
-async fn request_handler(req: Request) -> impl IntoResponse {
+async fn request_handler(req: Request) -> Response {
     let value;
 
     let state: &State = req.get_state().unwrap();
@@ -18,16 +18,16 @@ async fn request_handler(req: Request) -> impl IntoResponse {
         *counter += 1;
     }
 
-    lieweb::html(format!(
+    Response::with_html(format!(
         "got request#{} from {:?}",
         value,
         req.remote_addr()
     ))
 }
 
-async fn not_found(req: Request) -> impl IntoResponse {
+async fn not_found(req: Request) -> Response {
     println!("handler not found for {}", req.uri().path());
-    http::StatusCode::NOT_FOUND
+    http::StatusCode::NOT_FOUND.into()
 }
 
 #[tokio::main]
@@ -83,8 +83,8 @@ fn posts_router() -> Router {
     });
 
     posts.set_not_found_handler(|_req| async move {
-        let resp = lieweb::html("posts handler Not Found");
-        lieweb::with_status(resp, http::StatusCode::NOT_FOUND)
+        let resp = Response::with_html("posts handler Not Found");
+        resp.set_status(http::StatusCode::NOT_FOUND)
     });
 
     posts

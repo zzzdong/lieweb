@@ -7,7 +7,7 @@ use route_recognizer::{Match, Params, Router as MethodRouter};
 use crate::endpoint::{DynEndpoint, Endpoint, RouterEndpoint};
 use crate::middleware::{Middleware, Next};
 use crate::register_method;
-use crate::{IntoResponse, Request, Response};
+use crate::{Request, Response};
 
 const LIEWEB_NESTED_ROUTER: &str = "--lieweb-nested-router";
 
@@ -166,9 +166,9 @@ impl std::fmt::Debug for Router {
 }
 
 async fn not_found_endpoint(_ctx: Request) -> Response {
-    http::StatusCode::NOT_FOUND.into_response()
+    http::StatusCode::NOT_FOUND.into()
 }
 
 async fn method_not_allowed(_ctx: Request) -> Response {
-    http::StatusCode::METHOD_NOT_ALLOWED.into_response()
+    http::StatusCode::METHOD_NOT_ALLOWED.into()
 }

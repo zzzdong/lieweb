@@ -2,7 +2,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 use crate::router::Router;
-use crate::{IntoResponse, Request, Response};
+use crate::{Request, Response};
 
 pub(crate) type DynEndpoint = dyn Endpoint;
 
@@ -13,15 +13,15 @@ pub trait Endpoint: Send + Sync + 'static {
 }
 
 #[crate::async_trait]
-impl<F: Send + Sync + 'static, Fut> Endpoint for F
+impl<F: Send + Sync + 'static, Fut, Res> Endpoint for F
 where
     F: Fn(Request) -> Fut,
-    Fut: Future + Send + 'static,
-    Fut::Output: IntoResponse,
+    Fut: Future<Output = Res> + Send + 'static,
+    Res: Into<Response> + 'static,
 {
     async fn call(&self, req: Request) -> Response {
         let resp = self(req).await;
-        resp.into_response()
+        resp.into()
     }
 }
 
@@ -38,8 +38,7 @@ impl RouterEndpoint {
 #[crate::async_trait]
 impl Endpoint for RouterEndpoint {
     async fn call(&self, req: Request) -> Response {
-        let resp = self.router.route(req).await;
-        resp.into_response()
+        self.router.route(req).await
     }
 }
 
