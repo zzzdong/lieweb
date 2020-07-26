@@ -42,3 +42,12 @@ pub(crate) fn gen_random_string(length: usize) -> String {
         .take(length)
         .collect::<String>()
 }
+
+#[macro_export]
+macro_rules! register_method {
+    ($func_name: ident, $method: expr) => {
+        pub fn $func_name(&mut self, path: impl AsRef<str>, ep: impl Endpoint) {
+            self.register($method, path, ep)
+        }
+    };
+}

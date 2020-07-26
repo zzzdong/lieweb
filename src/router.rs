@@ -6,6 +6,7 @@ use route_recognizer::{Match, Params, Router as MethodRouter};
 
 use crate::endpoint::{DynEndpoint, Endpoint, RouterEndpoint};
 use crate::middleware::{Middleware, Next};
+use crate::register_method;
 use crate::{IntoResponse, Request, Response};
 
 const LIEWEB_NESTED_ROUTER: &str = "--lieweb-nested-router";
@@ -38,47 +39,22 @@ impl Router {
         self
     }
 
-    pub fn register(&mut self, method: http::Method, path: &str, ep: impl Endpoint) {
+    pub fn register(&mut self, method: http::Method, path: impl AsRef<str>, ep: impl Endpoint) {
         self.method_map
             .entry(method)
             .or_insert_with(MethodRouter::new)
-            .add(path, Box::new(ep));
+            .add(path.as_ref(), Box::new(ep));
     }
 
-    pub fn get(&mut self, path: &str, ep: impl Endpoint) {
-        self.register(http::Method::GET, path, ep)
-    }
-    pub fn head(&mut self, path: &str, ep: impl Endpoint) {
-        self.register(http::Method::HEAD, path, ep)
-    }
-
-    pub fn post(&mut self, path: &str, ep: impl Endpoint) {
-        self.register(http::Method::POST, path, ep)
-    }
-
-    pub fn put(&mut self, path: &str, ep: impl Endpoint) {
-        self.register(http::Method::PUT, path, ep)
-    }
-
-    pub fn delete(&mut self, path: &str, ep: impl Endpoint) {
-        self.register(http::Method::DELETE, path, ep)
-    }
-
-    pub fn connect(&mut self, path: &str, ep: impl Endpoint) {
-        self.register(http::Method::CONNECT, path, ep)
-    }
-
-    pub fn options(&mut self, path: &str, ep: impl Endpoint) {
-        self.register(http::Method::OPTIONS, path, ep)
-    }
-
-    pub fn trace(&mut self, path: &str, ep: impl Endpoint) {
-        self.register(http::Method::TRACE, path, ep)
-    }
-
-    pub fn patch(&mut self, path: &str, ep: impl Endpoint) {
-        self.register(http::Method::PATCH, path, ep)
-    }
+    register_method!(options, http::Method::OPTIONS);
+    register_method!(get, http::Method::GET);
+    register_method!(head, http::Method::HEAD);
+    register_method!(post, http::Method::POST);
+    register_method!(put, http::Method::PUT);
+    register_method!(delete, http::Method::DELETE);
+    register_method!(trace, http::Method::TRACE);
+    register_method!(connect, http::Method::CONNECT);
+    register_method!(patch, http::Method::PATCH);
 
     pub fn attach(&mut self, prefix: &str, router: Router) -> Result<(), crate::error::Error> {
         if !prefix.starts_with('/') || !prefix.ends_with('/') {

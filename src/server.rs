@@ -12,6 +12,7 @@ use lazy_static::lazy_static;
 use crate::endpoint::{Endpoint, RouterEndpoint};
 use crate::error::Error;
 use crate::middleware::{Middleware, WithState};
+use crate::register_method;
 use crate::request::Request;
 use crate::router::Router;
 
@@ -44,54 +45,19 @@ impl App {
         &mut self.router
     }
 
-    pub fn get(&mut self, path: &str, ep: impl Endpoint) -> &mut Self {
-        self.router.get(path, ep);
-        self
-    }
-    pub fn head(&mut self, path: &str, ep: impl Endpoint) -> &mut Self {
-        self.router.head(path, ep);
-        self
-    }
-
-    pub fn post(&mut self, path: &str, ep: impl Endpoint) -> &mut Self {
-        self.router.post(path, ep);
-        self
-    }
-
-    pub fn put(&mut self, path: &str, ep: impl Endpoint) -> &mut Self {
-        self.router.put(path, ep);
-        self
-    }
-
-    pub fn delete(&mut self, path: &str, ep: impl Endpoint) -> &mut Self {
-        self.router.delete(path, ep);
-        self
-    }
-
-    pub fn connect(&mut self, path: &str, ep: impl Endpoint) -> &mut Self {
-        self.router.connect(path, ep);
-        self
-    }
-
-    pub fn options(&mut self, path: &str, ep: impl Endpoint) -> &mut Self {
-        self.router.options(path, ep);
-        self
-    }
-
-    pub fn trace(&mut self, path: &str, ep: impl Endpoint) -> &mut Self {
-        self.router.trace(path, ep);
-        self
-    }
-
-    pub fn patch(&mut self, path: &str, ep: impl Endpoint) -> &mut Self {
-        self.router.patch(path, ep);
-        self
-    }
-
-    pub fn register(&mut self, method: http::Method, path: &str, ep: impl Endpoint) -> &mut Self {
+    pub fn register(&mut self, method: http::Method, path: impl AsRef<str>, ep: impl Endpoint) {
         self.router.register(method, path, ep);
-        self
     }
+
+    register_method!(options, http::Method::OPTIONS);
+    register_method!(get, http::Method::GET);
+    register_method!(head, http::Method::HEAD);
+    register_method!(post, http::Method::POST);
+    register_method!(put, http::Method::PUT);
+    register_method!(delete, http::Method::DELETE);
+    register_method!(trace, http::Method::TRACE);
+    register_method!(connect, http::Method::CONNECT);
+    register_method!(patch, http::Method::PATCH);
 
     pub fn attach(&mut self, prefix: &str, router: Router) -> Result<&mut Self, Error> {
         self.router.attach(prefix, router).map(|_| self)
