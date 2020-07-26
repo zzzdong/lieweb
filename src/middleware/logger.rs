@@ -16,7 +16,7 @@ impl RequestLogger {
         let path = ctx.uri().path().to_owned();
         let method = ctx.method().as_str().to_owned();
         let remote_addr = ctx.remote_addr();
-        let request_id = ctx.get_request_id().to_owned();
+        let request_id = ctx.get_request_id().unwrap_or_default().to_owned();
         tracing::trace!(
             "IN =>{} {} {}, From {:?}",
             request_id,
