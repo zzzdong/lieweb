@@ -9,8 +9,6 @@ use crate::{
     Request, Response,
 };
 
-use futures::future::BoxFuture;
-
 #[derive(Debug, Clone, Default)]
 pub struct DefaultHeaders {
     headers: HeaderMap,
@@ -52,8 +50,9 @@ impl DefaultHeaders {
     }
 }
 
+#[async_trait::async_trait]
 impl Middleware for DefaultHeaders {
-    fn handle<'a>(&'a self, ctx: Request, next: Next<'a>) -> BoxFuture<'a, Response> {
-        Box::pin(async move { self.append_header(ctx, next).await })
+    async fn handle<'a>(&'a self, ctx: Request, next: Next<'a>) -> Response {
+        self.append_header(ctx, next).await
     }
 }

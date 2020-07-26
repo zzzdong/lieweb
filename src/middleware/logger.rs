@@ -2,7 +2,6 @@ use crate::{
     middleware::{Middleware, Next},
     Request, Response,
 };
-use futures::future::BoxFuture;
 
 /// A simple requests logger
 #[derive(Debug, Clone, Default)]
@@ -39,8 +38,9 @@ impl RequestLogger {
     }
 }
 
+#[async_trait::async_trait]
 impl Middleware for RequestLogger {
-    fn handle<'a>(&'a self, ctx: Request, next: Next<'a>) -> BoxFuture<'a, Response> {
-        Box::pin(async move { self.log_basic(ctx, next).await })
+    async fn handle<'a>(&'a self, ctx: Request, next: Next<'a>) -> Response {
+        self.log_basic(ctx, next).await
     }
 }

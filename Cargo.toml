@@ -1,6 +1,6 @@
 [package]
 name = "lieweb"
-version = "0.2.0-alpha.1"
+version = "0.2.0-alpha.2"
 authors = ["zzzdong <kuwater@163.com>"]
 edition = "2018"
 license = "MIT"
@@ -19,6 +19,7 @@ default = []
 tls = [ "tokio-rustls" ]
 
 [dependencies]
+async-trait = "0.1"
 bytes = "0.5"
 futures = "0.3"
 futures-util = "0.3"

@@ -19,6 +19,7 @@ pub use router::Router;
 pub use server::{server_id, App};
 
 // reexport
+pub use async_trait::async_trait;
 pub use hyper;
 pub use hyper::http;
 pub use mime;

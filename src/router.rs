@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use futures::future::BoxFuture;
 use hyper::http;
 use route_recognizer::{Match, Params, Router as MethodRouter};
 
@@ -190,10 +189,10 @@ impl std::fmt::Debug for Router {
     }
 }
 
-fn not_found_endpoint(_ctx: Request) -> BoxFuture<'static, Response> {
-    Box::pin(async move { http::StatusCode::NOT_FOUND.into_response() })
+async fn not_found_endpoint(_ctx: Request) -> Response {
+    http::StatusCode::NOT_FOUND.into_response()
 }
 
-fn method_not_allowed(_ctx: Request) -> BoxFuture<'static, Response> {
-    Box::pin(async move { http::StatusCode::METHOD_NOT_ALLOWED.into_response() })
+async fn method_not_allowed(_ctx: Request) -> Response {
+    http::StatusCode::METHOD_NOT_ALLOWED.into_response()
 }

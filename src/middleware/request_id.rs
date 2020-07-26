@@ -6,8 +6,6 @@ use crate::{
     Request, Response,
 };
 
-use futures::future::BoxFuture;
-
 const RANDOM_STRING_LEN: usize = 6;
 
 #[derive(Debug, Clone)]
@@ -29,17 +27,20 @@ impl Default for RequestId {
     }
 }
 
+#[async_trait::async_trait]
 impl Middleware for RequestId {
-    fn handle<'a>(&'a self, mut ctx: Request, next: Next<'a>) -> BoxFuture<'a, Response> {
-        Box::pin(async move {
-            let id = self.count.fetch_add(1, Ordering::SeqCst);
+    async fn handle<'a>(&'a self, mut ctx: Request, next: Next<'a>) -> Response {
+        let id = self.count.fetch_add(1, Ordering::SeqCst);
 
-            let value = format!("{}-{}", crate::utils::gen_random_string(RANDOM_STRING_LEN), id);
-            let val = RequestIdValue::new(value);
-            ctx.insert_extension(val);
+        let value = format!(
+            "{}-{}",
+            crate::utils::gen_random_string(RANDOM_STRING_LEN),
+            id
+        );
+        let val = RequestIdValue::new(value);
+        ctx.insert_extension(val);
 
-            next.run(ctx).await
-        })
+        next.run(ctx).await
     }
 }
 

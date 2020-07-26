@@ -4,7 +4,6 @@ use crate::{
     middleware::{Middleware, Next},
     Request, Response,
 };
-use futures::future::BoxFuture;
 
 #[derive(Debug, Clone, Default)]
 pub struct WithState<T: Send + Sync + 'static> {
@@ -24,8 +23,9 @@ impl<T: Send + Sync + 'static> WithState<T> {
     }
 }
 
+#[async_trait::async_trait]
 impl<T: Send + Sync + 'static + Clone> Middleware for WithState<T> {
-    fn handle<'a>(&'a self, ctx: Request, next: Next<'a>) -> BoxFuture<'a, Response> {
-        Box::pin(async move { self.append_extension(ctx, next).await })
+    async fn handle<'a>(&'a self, ctx: Request, next: Next<'a>) -> Response {
+        self.append_extension(ctx, next).await
     }
 }

@@ -1,27 +1,27 @@
 use std::future::Future;
 use std::sync::Arc;
 
-use futures::future::BoxFuture;
-
 use crate::router::Router;
 use crate::{IntoResponse, Request, Response};
 
 pub(crate) type DynEndpoint = dyn Endpoint;
 
+#[async_trait::async_trait]
 pub trait Endpoint: Send + Sync + 'static {
     /// Invoke the endpoint within the given context
-    fn call(&self, req: Request) -> BoxFuture<'_, Response>;
+    async fn call(&self, req: Request) -> Response;
 }
 
+#[async_trait::async_trait]
 impl<F: Send + Sync + 'static, Fut> Endpoint for F
 where
     F: Fn(Request) -> Fut,
     Fut: Future + Send + 'static,
     Fut::Output: IntoResponse,
 {
-    fn call(&self, req: Request) -> BoxFuture<'_, Response> {
-        let fut = (self)(req);
-        Box::pin(async move { fut.await.into_response() })
+    async fn call(&self, req: Request) -> Response {
+        let resp = self(req).await;
+        resp.into_response()
     }
 }
 
@@ -35,10 +35,11 @@ impl RouterEndpoint {
     }
 }
 
+#[async_trait::async_trait]
 impl Endpoint for RouterEndpoint {
-    fn call(&self, req: Request) -> BoxFuture<'_, Response> {
-        let fut = self.router.route(req);
-        Box::pin(async move { fut.await.into_response() })
+    async fn call(&self, req: Request) -> Response {
+        let resp = self.router.route(req).await;
+        resp.into_response()
     }
 }
 

@@ -9,17 +9,17 @@ pub use logger::RequestLogger;
 pub use request_id::RequestId;
 pub use with_state::WithState;
 
+use std::future::Future;
 use std::sync::Arc;
-
-use futures::future::BoxFuture;
 
 use crate::endpoint::DynEndpoint;
 use crate::{Request, Response};
 
 /// Middleware that wraps around remaining middleware chain.
+#[async_trait::async_trait]
 pub trait Middleware: 'static + Send + Sync {
     /// Asynchronously handle the request, and return a response.
-    fn handle<'a>(&'a self, cx: Request, next: Next<'a>) -> BoxFuture<'a, Response>;
+    async fn handle<'a>(&'a self, cx: Request, next: Next<'a>) -> Response;
 
     /// Set the middleware's name. By default it uses the type signature.
     fn name(&self) -> &str {
@@ -27,12 +27,14 @@ pub trait Middleware: 'static + Send + Sync {
     }
 }
 
-impl<F> Middleware for F
+#[async_trait::async_trait]
+impl<F, Fut> Middleware for F
 where
-    F: Fn(Request, Next<'_>) -> BoxFuture<'_, Response> + Send + Sync + 'static,
+    F: Fn(Request, Next<'_>) -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = Response> + Send + Sync + 'static,
 {
-    fn handle<'a>(&'a self, req: Request, next: Next<'a>) -> BoxFuture<'a, Response> {
-        (self)(req, next)
+    async fn handle<'a>(&'a self, cx: Request, next: Next<'a>) -> Response {
+        (self)(cx, next).await
     }
 }
 
@@ -45,12 +47,12 @@ pub struct Next<'a> {
 
 impl<'a> Next<'a> {
     /// Asynchronously execute the remaining middleware chain.
-    pub fn run(mut self, req: Request) -> BoxFuture<'a, Response> {
+    pub async fn run(mut self, req: Request) -> Response {
         if let Some((current, next)) = self.next_middleware.split_first() {
             self.next_middleware = next;
-            current.handle(req, self)
+            current.handle(req, self).await
         } else {
-            (self.endpoint).call(req)
+            (self.endpoint).call(req).await
         }
     }
 }
