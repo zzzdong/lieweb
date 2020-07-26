@@ -19,7 +19,7 @@ use crate::{Request, Response};
 #[crate::async_trait]
 pub trait Middleware: 'static + Send + Sync {
     /// Asynchronously handle the request, and return a response.
-    async fn handle<'a>(&'a self, cx: Request, next: Next<'a>) -> Response;
+    async fn handle<'a>(&'a self, req: Request, next: Next<'a>) -> Response;
 
     /// Set the middleware's name. By default it uses the type signature.
     fn name(&self) -> &str {
@@ -33,8 +33,8 @@ where
     F: Fn(Request, Next<'_>) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = Response> + Send + 'static,
 {
-    async fn handle<'a>(&'a self, cx: Request, next: Next<'a>) -> Response {
-        (self)(cx, next).await
+    async fn handle<'a>(&'a self, req: Request, next: Next<'a>) -> Response {
+        (self)(req, next).await
     }
 }
 
