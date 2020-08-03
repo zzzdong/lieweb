@@ -8,6 +8,13 @@ const RANDOM_STRING_LEN: usize = 6;
 #[derive(Debug, Clone, Default)]
 pub struct RequestId;
 
+impl RequestId {
+    pub fn get(req: &Request) -> Option<&str> {
+        let val = req.get_extension::<RequestIdValue>();
+        val.map(|v| v.value.as_str())
+    }
+}
+
 #[crate::async_trait]
 impl Middleware for RequestId {
     async fn handle<'a>(&'a self, mut ctx: Request, next: Next<'a>) -> Response {
@@ -26,12 +33,5 @@ struct RequestIdValue {
 impl RequestIdValue {
     fn new(value: String) -> Self {
         RequestIdValue { value }
-    }
-}
-
-impl Request {
-    pub fn get_request_id(&self) -> Option<&str> {
-        let val = self.get_extension::<RequestIdValue>();
-        val.map(|v| v.value.as_str())
     }
 }
