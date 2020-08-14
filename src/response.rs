@@ -15,11 +15,11 @@ pub struct Response {
 
 impl Response {
     pub fn new() -> Self {
-        Self::with_status(StatusCode::OK)
+        HyperResponse::default().into()
     }
 
     pub fn with_status(status: StatusCode) -> Self {
-        status.into()
+        Self::new().set_status(status)
     }
 
     pub fn with_html<T>(body: T) -> Self
