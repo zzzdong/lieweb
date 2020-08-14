@@ -52,7 +52,7 @@ async fn main() {
     default_headers.header(http::header::SERVER, lieweb::server_id());
 
     app.middleware(default_headers);
-    app.middleware(middleware::RequestLogger);
+    app.middleware(middleware::AccessLog);
 
     app.register(http::Method::GET, "/", request_handler);
 

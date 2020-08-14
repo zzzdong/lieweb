@@ -1,11 +1,11 @@
 // import mod
+mod access_log;
 mod default_headers;
-mod logger;
 mod request_id;
 mod with_state;
 
+pub use access_log::AccessLog;
 pub use default_headers::DefaultHeaders;
-pub use logger::RequestLogger;
 pub use request_id::RequestId;
 pub use with_state::WithState;
 

@@ -1,13 +1,13 @@
 use crate::{
-    middleware::{Middleware, Next, RequestId},
+    middleware::{Middleware, Next},
     Request, Response,
 };
 
 /// A simple requests logger
-#[derive(Debug, Clone, Default)]
-pub struct RequestLogger;
+#[derive(Debug, Default)]
+pub struct AccessLog;
 
-impl RequestLogger {
+impl AccessLog {
     pub fn new() -> Self {
         Self::default()
     }
@@ -16,30 +16,24 @@ impl RequestLogger {
         let path = ctx.uri().path().to_owned();
         let method = ctx.method().as_str().to_owned();
         let remote_addr = ctx.remote_addr();
-        let request_id = RequestId::get(&ctx).unwrap_or_default().to_owned();
-        tracing::trace!(
-            "IN =>{} {} {}, From {:?}",
-            request_id,
-            method,
-            path,
-            remote_addr
-        );
+
         let start = std::time::Instant::now();
         let res = next.run(ctx).await;
         let status = res.status();
+        let cost = start.elapsed().as_millis() as f32 / 1000.0;
         tracing::info!(
-            request_id=%request_id,
-            method=%method,
-            path=%path,
+            %remote_addr,
+            %method,
+            %path,
             status=%status.as_str(),
-            cost=%start.elapsed().as_millis(),
+            cost=%cost,
         );
         res
     }
 }
 
 #[crate::async_trait]
-impl Middleware for RequestLogger {
+impl Middleware for AccessLog {
     async fn handle<'a>(&'a self, ctx: Request, next: Next<'a>) -> Response {
         self.log_basic(ctx, next).await
     }

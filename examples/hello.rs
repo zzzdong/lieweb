@@ -46,7 +46,9 @@ async fn handle_form_urlencoded(mut req: Request) -> Result<Response, Error> {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt().init();
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
 
     let mut addr = DEFAULT_ADDR.to_string();
 
@@ -65,7 +67,7 @@ async fn main() {
     default_headers.header(http::header::SERVER, lieweb::server_id());
 
     app.middleware(middleware::RequestId);
-    app.middleware(middleware::RequestLogger);
+    app.middleware(middleware::AccessLog);
     app.middleware(default_headers);
 
     app.register(http::Method::GET, "/", request_handler);
