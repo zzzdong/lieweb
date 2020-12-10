@@ -1,6 +1,4 @@
-use route_recognizer::Params;
 use std::net::SocketAddr;
-use std::sync::Arc;
 
 use bytes::{Buf, Bytes, BytesMut};
 use hyper::body::HttpBody;
@@ -8,11 +6,13 @@ use hyper::http::{
     self,
     header::{HeaderMap, HeaderName, HeaderValue},
 };
+use route_recognizer::Params;
 use serde::de::DeserializeOwned;
 
 pub type HyperRequest = hyper::Request<hyper::Body>;
 
 use crate::Error;
+use crate::middleware::AppState;
 
 pub struct Request {
     pub(crate) inner: HyperRequest,
@@ -77,8 +77,8 @@ impl Request {
     {
         self.inner
             .extensions()
-            .get::<Arc<T>>()
-            .map(|o| o.as_ref())
+            .get::<AppState<T>>()
+            .map(|o| o.inner.as_ref())
             .ok_or_else(|| crate::error_msg!("state{:?} not exist", std::any::type_name::<T>()))
     }
 
