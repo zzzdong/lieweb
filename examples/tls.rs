@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use lieweb::{http, middleware, App, Error, Request};
+use lieweb::{http, middleware, App, Error, Request, Response};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
@@ -27,7 +27,7 @@ async fn request_handler(req: Request) -> Response {
         *counter += 1;
     }
 
-    lieweb::html(format!(
+    Response::with_html(format!(
         "got request#{} from {:?}",
         value,
         req.remote_addr()
@@ -36,7 +36,7 @@ async fn request_handler(req: Request) -> Response {
 
 async fn not_found(req: Request) -> Response {
     println!("handler not found for {}", req.uri().path());
-    http::StatusCode::NOT_FOUND
+    Response::with_status(http::StatusCode::NOT_FOUND)
 }
 
 async fn handle_form_urlencoded(mut req: Request) -> Result<Response, Error> {
@@ -44,7 +44,7 @@ async fn handle_form_urlencoded(mut req: Request) -> Result<Response, Error> {
 
     println!("form=> {:?}", form);
 
-    Ok(lieweb::json(&form))
+    Ok(Response::with_json(&form))
 }
 
 #[tokio::main]
@@ -90,12 +90,7 @@ async fn main() {
 
     app.handle_not_found(not_found);
 
-    app.run_with_tls(
-        &addr,
-        "examples/server.crt",
-        "examples/abc.key",
-        None::<futures::future::Ready<()>>,
-    )
-    .await
-    .unwrap();
+    app.run_with_tls(&addr, "examples/server.crt", "examples/abc.key")
+        .await
+        .unwrap();
 }

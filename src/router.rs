@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use hyper::http;
-use route_recognizer::{Match, Params, Router as MethodRouter};
+use route_recognizer::{Params, Router as MethodRouter};
 
 use crate::endpoint::{DynEndpoint, Endpoint, RouterEndpoint};
 use crate::middleware::{Middleware, Next};
@@ -75,19 +75,19 @@ impl Router {
     }
 
     pub(crate) fn find(&self, method: http::Method, path: &str) -> Selection {
-        if let Some(Match { handler, params }) = self
+        if let Some(m) = self
             .method_map
             .get(&method)
             .and_then(|r| r.recognize(path).ok())
         {
             Selection {
-                endpoint: &**handler,
-                params,
+                endpoint: &***m.handler(),
+                params: m.params().clone(),
             }
-        } else if let Ok(Match { handler, params }) = self.all_method_router.recognize(path) {
+        } else if let Ok(m) = self.all_method_router.recognize(path) {
             Selection {
-                endpoint: &**handler,
-                params,
+                endpoint: &***m.handler(),
+                params: m.params().clone(),
             }
         } else if method == http::Method::HEAD {
             // If it is a HTTP HEAD request then check if there is a callback in the endpoints map

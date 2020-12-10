@@ -1,13 +1,13 @@
-use std::future::Future;
 use std::net::SocketAddr;
 #[cfg(feature = "tls")]
 use std::path::Path;
 use std::sync::Arc;
 
 use hyper::http;
-use hyper::server::conn::AddrStream;
-use hyper::service::{make_service_fn, service_fn};
+use hyper::server::conn::Http;
+use hyper::service::service_fn;
 use lazy_static::lazy_static;
+use tokio::net::TcpListener;
 
 use crate::endpoint::{Endpoint, RouterEndpoint};
 use crate::error::Error;
@@ -74,104 +74,91 @@ impl App {
     }
 
     pub async fn run(self, addr: &SocketAddr) -> Result<(), Error> {
-        self.run_with_shutdown::<futures::future::Ready<()>>(addr, None)
-            .await
-    }
-
-    pub async fn run_with_shutdown<F>(
-        self,
-        addr: &SocketAddr,
-        signal: Option<F>,
-    ) -> Result<(), Error>
-    where
-        F: Future<Output = ()>,
-    {
         let App { router } = self;
         let router = Arc::new(router);
 
-        // And a MakeService to handle each connection...
-        let make_svc = make_service_fn(|socket: &AddrStream| {
-            let remote_addr = socket.remote_addr();
+        let server = Http::new();
+
+        let listener = TcpListener::bind(addr).await.unwrap();
+        while let Ok((socket, remote_addr)) = listener.accept().await {
+            let server = server.clone();
             let router = router.clone();
 
-            async move {
-                // This is the `Service` that will handle the connection.
-                // `service_fn` is a helper to convert a function that
-                // returns a Response into a `Service`.
-                Ok::<_, Error>(service_fn(move |req| {
-                    let router = router.clone();
+            tokio::spawn(async move {
+                let router = router.clone();
 
-                    async move {
+                let ret = server.serve_connection(
+                    socket,
+                    service_fn(|req| {
+                        let router = router.clone();
                         let req = Request::new(req, remote_addr);
 
-                        let endpoint = RouterEndpoint::new(router);
-                        let resp = endpoint.call(req).await;
+                        async move {
+                            let endpoint = RouterEndpoint::new(router);
+                            let resp = endpoint.call(req).await;
+                            Ok::<_, Error>(resp.into())
+                        }
+                    }),
+                );
 
-                        Ok::<_, Error>(resp.into())
-                    }
-                }))
-            }
-        });
-
-        if let Some(signal) = signal {
-            hyper::Server::bind(&addr)
-                .serve(make_svc)
-                .with_graceful_shutdown(signal)
-                .await?;
-        } else {
-            hyper::Server::bind(&addr).serve(make_svc).await?;
+                if let Err(e) = ret.await {
+                    tracing::error!("serve_connection error: {:?}", e);
+                }
+            });
         }
 
         Ok(())
     }
 
     #[cfg(feature = "tls")]
-    pub async fn run_with_tls<F>(
+    pub async fn run_with_tls(
         self,
         addr: &SocketAddr,
         cert: impl AsRef<Path>,
         key: impl AsRef<Path>,
-        signal: Option<F>,
-    ) -> Result<(), Error>
-    where
-        F: Future<Output = ()>,
-    {
+    ) -> Result<(), Error> {
         let App { router } = self;
         let router = Arc::new(router);
 
-        // And a MakeService to handle each connection...
-        let make_svc = make_service_fn(|socket: &crate::tls::TlsStream| {
-            let remote_addr = socket.remote_addr();
+        let server = Http::new();
+
+        let tls_acceptor = crate::tls::new_tls_acceptor(cert, key)?;
+
+        let listener = TcpListener::bind(addr).await.unwrap();
+        while let Ok((socket, remote_addr)) = listener.accept().await {
+            let tls_acceptor = tls_acceptor.clone();
+            let server = server.clone();
             let router = router.clone();
 
-            async move {
-                // This is the `Service` that will handle the connection.
-                // `service_fn` is a helper to convert a function that
-                // returns a Response into a `Service`.
-                Ok::<_, Error>(service_fn(move |req| {
-                    let router = router.clone();
+            tokio::spawn(async move {
+                let tls_acceptor = tls_acceptor.clone();
+                let router = router.clone();
 
-                    async move {
-                        let req = Request::new(req, remote_addr);
+                match tls_acceptor.accept(socket).await {
+                    Ok(stream) => {
+                        let ret = server.serve_connection(
+                            stream,
+                            service_fn(|req| {
+                                let router = router.clone();
+                                let req = Request::new(req, remote_addr);
 
-                        let endpoint = RouterEndpoint::new(router);
-                        let resp = endpoint.call(req).await;
+                                async move {
+                                    let endpoint = RouterEndpoint::new(router);
+                                    let resp = endpoint.call(req).await;
+                                    Ok::<_, Error>(resp.into())
+                                }
+                            }),
+                        );
 
-                        Ok::<_, Error>(resp.into())
+                        if let Err(e) = ret.await {
+                            tracing::error!("serve_connection error: {:?}", e);
+                        }
                     }
-                }))
-            }
-        });
-
-        let incoming = crate::tls::TlsIncoming::new(addr, cert, key)?;
-
-        if let Some(signal) = signal {
-            hyper::Server::builder(incoming)
-                .serve(make_svc)
-                .with_graceful_shutdown(signal)
-                .await?;
-        } else {
-            hyper::Server::builder(incoming).serve(make_svc).await?;
+                    Err(err) => {
+                        tracing::error!("tls accept failed, {:?}", err);
+                    }
+                }
+            });
         }
 
         Ok(())

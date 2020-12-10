@@ -1,6 +1,6 @@
 [package]
 name = "lieweb"
-version = "0.2.0-alpha.3"
+version = "0.2.0-beta.1"
 authors = ["zzzdong <kuwater@163.com>"]
 edition = "2018"
 license = "MIT"
@@ -20,25 +20,25 @@ tls = [ "tokio-rustls" ]
 
 [dependencies]
 async-trait = "0.1"
-bytes = "0.5"
+bytes = "0.6"
 futures = "0.3"
 futures-util = "0.3"
-hyper = "0.13"
+hyper = { git="https://github.com/hyperium/hyper.git", features=["server", "http1", "http2", "stream"] }
 lazy_static = "1.4"
 mime = "0.3"
 rand = "0.7"
-route-recognizer = "0.2"
+route-recognizer = "0.3"
 serde = "1.0"
 serde_json = "1.0"
-serde_urlencoded = "0.6.1"
+serde_urlencoded = "0.7"
 thiserror = "1.0"
-tokio = "0.2"
-tokio-rustls = { version="0.14", optional=true }
+tokio = "0.3"
+tokio-rustls = { version="0.21", optional=true }
 tracing = "0.1"
 
 [dev-dependencies]
 tracing-subscriber = "0.2"
-tokio = { version="0.2", features=["full"] }
+tokio = { version="0.3", features=["full"] }
 serde = { version="1.0", features=["derive"] }
 
 [[example]]

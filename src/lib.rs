@@ -1,20 +1,17 @@
 mod endpoint;
 mod error;
 pub mod middleware;
-mod request;
+pub mod request;
 pub mod response;
 mod router;
 mod server;
-#[cfg(test)]
-mod test;
 #[cfg(feature = "tls")]
 mod tls;
 mod utils;
 
 pub use error::Error;
-pub use request::HyperRequest;
-pub use request::Request;
-pub use response::*;
+pub use request::{HyperRequest, Request};
+pub use response::{HyperResponse, Response};
 pub use router::Router;
 pub use server::{server_id, App};
 
