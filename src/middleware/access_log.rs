@@ -15,18 +15,18 @@ impl AccessLog {
     async fn log_basic<'a>(&'a self, ctx: Request, next: Next<'a>) -> Response {
         let path = ctx.uri().path().to_owned();
         let method = ctx.method().as_str().to_owned();
-        let remote_addr = ctx.remote_addr();
+        let remote_addr = ctx.remote_addr().map(|a| a.to_string()).unwrap_or_default();
 
         let start = std::time::Instant::now();
         let res = next.run(ctx).await;
-        let status = res.status();
-        let cost = start.elapsed().as_millis() as f32 / 1000.0;
+        let status = res.status().as_u16();
+        let cost = start.elapsed().as_millis() as f64 / 1000.0;
         tracing::info!(
             %remote_addr,
             %method,
             %path,
-            status=%status.as_str(),
-            cost=%cost,
+            %status,
+            %cost,
         );
         res
     }

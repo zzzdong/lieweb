@@ -11,18 +11,18 @@ use serde::de::DeserializeOwned;
 
 pub type HyperRequest = hyper::Request<hyper::Body>;
 
+use crate::middleware::WithState;
 use crate::Error;
-use crate::middleware::AppState;
 
 pub struct Request {
     pub(crate) inner: HyperRequest,
     params: Params,
-    remote_addr: SocketAddr,
+    remote_addr: Option<SocketAddr>,
     route_path: Option<String>,
 }
 
 impl Request {
-    pub(crate) fn new(request: HyperRequest, remote_addr: SocketAddr) -> Self {
+    pub fn new(request: HyperRequest, remote_addr: Option<SocketAddr>) -> Self {
         Request {
             inner: request,
             params: Params::new(),
@@ -63,7 +63,7 @@ impl Request {
         self.inner.version()
     }
 
-    pub fn remote_addr(&self) -> SocketAddr {
+    pub fn remote_addr(&self) -> Option<SocketAddr> {
         self.remote_addr
     }
 
@@ -75,11 +75,8 @@ impl Request {
     where
         T: Send + Sync + 'static + Clone,
     {
-        self.inner
-            .extensions()
-            .get::<AppState<T>>()
-            .map(|o| o.inner.as_ref())
-            .ok_or_else(|| crate::error_msg!("state{:?} not exist", std::any::type_name::<T>()))
+        WithState::get_state(self)
+            .ok_or_else(|| crate::error_msg!("state {:?} not exist", std::any::type_name::<T>()))
     }
 
     pub fn get_extension<T>(&self) -> Option<&T>
@@ -181,5 +178,11 @@ impl Request {
         }
 
         &self.params
+    }
+}
+
+impl From<hyper::Request<hyper::Body>> for Request {
+    fn from(req: hyper::Request<hyper::Body>) -> Self {
+        Request::new(req, None)
     }
 }

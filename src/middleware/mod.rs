@@ -8,7 +8,6 @@ pub use access_log::AccessLog;
 pub use default_headers::DefaultHeaders;
 pub use request_id::RequestId;
 pub use with_state::WithState;
-pub(crate) use with_state::AppState;
 
 use std::future::Future;
 use std::sync::Arc;

@@ -23,6 +23,10 @@ impl<T: Send + Sync + 'static> WithState<T> {
         ctx.insert_extension(self.extension.clone());
         next.run(ctx).await
     }
+
+    pub(crate) fn get_state(ctx: &Request) -> Option<&T> {
+        ctx.get_extension::<AppState<T>>().map(|o| o.inner.as_ref())
+    }
 }
 
 #[crate::async_trait]

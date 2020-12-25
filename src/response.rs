@@ -49,8 +49,8 @@ impl Response {
         s.into()
     }
 
-    pub fn with_string(s: String) -> Self {
-        s.into()
+    pub fn with_string(s: impl ToString) -> Self {
+        s.to_string().into()
     }
 
     pub fn inner(&self) -> &HyperResponse {

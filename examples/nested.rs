@@ -41,8 +41,6 @@ async fn main() {
         addr = args.nth(2).unwrap();
     }
 
-    let addr = addr.parse().unwrap();
-
     let state: Arc<Mutex<u64>> = Arc::new(Mutex::new(0));
 
     let mut app = App::with_state(state);

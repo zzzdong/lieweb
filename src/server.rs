@@ -1,4 +1,3 @@
-use std::net::SocketAddr;
 #[cfg(feature = "tls")]
 use std::path::Path;
 use std::sync::Arc;
@@ -7,14 +6,17 @@ use hyper::http;
 use hyper::server::conn::Http;
 use hyper::service::service_fn;
 use lazy_static::lazy_static;
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, ToSocketAddrs};
 
-use crate::endpoint::{Endpoint, RouterEndpoint};
 use crate::error::Error;
 use crate::middleware::{Middleware, WithState};
 use crate::register_method;
 use crate::request::Request;
 use crate::router::Router;
+use crate::{
+    endpoint::{Endpoint, RouterEndpoint},
+    Response,
+};
 
 lazy_static! {
     pub static ref SERVER_ID: String = format!("Lieweb {}", env!("CARGO_PKG_VERSION"));
@@ -73,7 +75,16 @@ impl App {
         self
     }
 
-    pub async fn run(self, addr: &SocketAddr) -> Result<(), Error> {
+    pub async fn respond(self, req: impl Into<Request>) -> Response {
+        let req = req.into();
+        let App { router } = self;
+        let router = Arc::new(router);
+
+        let endpoint = RouterEndpoint::new(router);
+        endpoint.call(req).await
+    }
+
+    pub async fn run(self, addr: impl ToSocketAddrs) -> Result<(), Error> {
         let App { router } = self;
         let router = Arc::new(router);
 
@@ -91,7 +102,7 @@ impl App {
                     socket,
                     service_fn(|req| {
                         let router = router.clone();
-                        let req = Request::new(req, remote_addr);
+                        let req = Request::new(req, Some(remote_addr));
 
                         async move {
                             let endpoint = RouterEndpoint::new(router);
@@ -113,7 +124,7 @@ impl App {
     #[cfg(feature = "tls")]
     pub async fn run_with_tls(
         self,
-        addr: &SocketAddr,
+        addr: impl ToSocketAddrs,
         cert: impl AsRef<Path>,
         key: impl AsRef<Path>,
     ) -> Result<(), Error> {
@@ -140,7 +151,7 @@ impl App {
                             stream,
                             service_fn(|req| {
                                 let router = router.clone();
-                                let req = Request::new(req, remote_addr);
+                                let req = Request::new(req, Some(remote_addr));
 
                                 async move {
                                     let endpoint = RouterEndpoint::new(router);
@@ -173,4 +184,48 @@ impl Default for App {
 
 pub fn server_id() -> &'static str {
     &SERVER_ID
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{App, HyperRequest, Router};
+
+    fn app() -> App {
+        let mut app = App::new();
+
+        app.get("/", |_req| async move { "/" });
+        app.post("/post", |_req| async move { "/post" });
+
+        app
+    }
+
+    fn request() -> HyperRequest {
+        hyper::Request::builder()
+            .uri("/")
+            .body(crate::hyper::Body::empty())
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn basic() {
+        let resp = app().respond(request()).await;
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn tree() {
+        let mut app = app();
+
+        let mut router = Router::new();
+
+        router.get("/subtree", |_| async move { "/tree/subtree" });
+
+        app.attach("/tree/", router).unwrap();
+
+        let mut req = request();
+        *req.uri_mut() = "/tree/subtree".parse().unwrap();
+
+        let resp = app.respond(req).await;
+        assert_eq!(resp.status(), 200);
+    }
 }
