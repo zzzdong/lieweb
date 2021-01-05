@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 
 use bytes::{Buf, Bytes, BytesMut};
+use headers::{Header, HeaderMapExt};
 use hyper::body::HttpBody;
 use hyper::http::{
     self,
@@ -11,8 +12,10 @@ use serde::de::DeserializeOwned;
 
 pub type HyperRequest = hyper::Request<hyper::Body>;
 
-use crate::middleware::WithState;
-use crate::Error;
+use crate::error::{
+    invalid_header, invalid_param, missing_appstate, missing_cookie, missing_header, missing_param,
+};
+use crate::{middleware::WithState, Error};
 
 pub struct Request {
     pub(crate) inner: HyperRequest,
@@ -71,12 +74,20 @@ impl Request {
         &self.params
     }
 
+    pub fn get_cookie(&self, name: &str) -> Result<String, Error> {
+        let cookie: headers::Cookie = self.get_typed_header()?;
+
+        cookie
+            .get(name)
+            .ok_or_else(|| missing_cookie(name))
+            .map(|s| s.to_string())
+    }
+
     pub fn get_state<T>(&self) -> Result<&T, Error>
     where
         T: Send + Sync + 'static + Clone,
     {
-        WithState::get_state(self)
-            .ok_or_else(|| crate::error_msg!("state {:?} not exist", std::any::type_name::<T>()))
+        WithState::get_state(self).ok_or_else(|| missing_appstate(std::any::type_name::<T>()))
     }
 
     pub fn get_extension<T>(&self) -> Option<&T>
@@ -108,8 +119,8 @@ impl Request {
         match self.params.find(param) {
             Some(param) => param
                 .parse()
-                .map_err(|e| crate::error_msg!("parse param error: {:?}", e)),
-            None => Err(crate::error_msg!("param {} not found", param)),
+                .map_err(|e| invalid_param(param, std::any::type_name::<T>(), e)),
+            None => Err(missing_param(param)),
         }
     }
 
@@ -118,13 +129,21 @@ impl Request {
         HeaderName: From<K>,
     {
         let key: HeaderName = header.into();
+        let key_cloned = key.clone();
         let value = self
             .inner
             .headers()
             .get(key)
-            .ok_or_else(|| crate::error_msg!("Header not found"))?;
+            .ok_or_else(|| missing_header(key_cloned))?;
 
         Ok(value)
+    }
+
+    pub fn get_typed_header<T: Header + Send + 'static>(&self) -> Result<T, Error> {
+        self.inner
+            .headers()
+            .typed_get::<T>()
+            .ok_or_else(|| invalid_header(T::name().as_str()))
     }
 
     pub fn get_query<T: DeserializeOwned + Default>(&self) -> Result<T, Error> {

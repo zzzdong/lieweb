@@ -23,6 +23,7 @@ async-trait = "0.1"
 bytes = "1.0"
 futures = "0.3"
 futures-util = "0.3"
+headers = "0.3"
 hyper = { version="0.14", features=["server", "http1", "http2", "stream"] }
 lazy_static = "1.4"
 mime = "0.3"
