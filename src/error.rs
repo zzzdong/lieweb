@@ -13,9 +13,7 @@ pub enum Error {
     #[error("lieweb error")]
     Message(String),
     #[error("invalid request header {name:?}")]
-    InvalidHeader {
-        name: &'static str,
-    },
+    InvalidHeader { name: &'static str },
     #[error("invalid param {name:?} as {expected:?}, {err:?}")]
     InvalidParam {
         name: String,
@@ -23,21 +21,13 @@ pub enum Error {
         err: String,
     },
     #[error("missing AppState {name:?}")]
-    MissingAppState {
-        name: &'static str,
-    },
+    MissingAppState { name: &'static str },
     #[error("missing url param {name:?}")]
-    MissingParam {
-        name: String,
-    },
+    MissingParam { name: String },
     #[error("missing cookie {name:?}")]
-    MissingCookie {
-        name: String,
-    },
+    MissingCookie { name: String },
     #[error("missing header {name:?}")]
-    MissingHeaader {
-        name: String,
-    },
+    MissingHeaader { name: String },
 }
 
 impl<'a> From<&'a str> for Error {
@@ -62,13 +52,15 @@ macro_rules! error_msg {
     };
 }
 
-pub fn invalid_header(name:  &'static str, ) -> Error {
-    Error::InvalidHeader {
-        name,
-    }
+pub fn invalid_header(name: &'static str) -> Error {
+    Error::InvalidHeader { name }
 }
 
-pub fn invalid_param(name: impl ToString, expected: &'static str, err: impl std::error::Error) -> Error {
+pub fn invalid_param(
+    name: impl ToString,
+    expected: &'static str,
+    err: impl std::error::Error,
+) -> Error {
     Error::InvalidParam {
         name: name.to_string(),
         expected,
@@ -77,9 +69,7 @@ pub fn invalid_param(name: impl ToString, expected: &'static str, err: impl std:
 }
 
 pub fn missing_appstate(name: &'static str) -> Error {
-    Error::MissingAppState {
-        name,
-    }
+    Error::MissingAppState { name }
 }
 
 pub fn missing_cookie(name: impl ToString) -> Error {

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use hyper::http;
-use route_recognizer::{Params, Router as MethodRouter};
+use route_recognizer::{Params, Router as PathRouter};
 
 use crate::endpoint::{DynEndpoint, Endpoint, RouterEndpoint};
 use crate::middleware::{Middleware, Next};
@@ -10,6 +10,10 @@ use crate::register_method;
 use crate::{Request, Response};
 
 const LIEWEB_NESTED_ROUTER: &str = "--lieweb-nested-router";
+
+lazy_static::lazy_static! {
+    pub static ref METHOD_ALL: http::Method = http::Method::from_bytes(b"__ALL__").unwrap();
+}
 
 /// The result of routing a URL
 pub(crate) struct Selection<'a> {
@@ -19,31 +23,28 @@ pub(crate) struct Selection<'a> {
 
 pub struct Router {
     middlewares: Vec<Arc<dyn Middleware>>,
-    method_map: HashMap<http::Method, MethodRouter<Box<DynEndpoint>>>,
-    handle_not_found: Option<Box<DynEndpoint>>,
-    all_method_router: MethodRouter<Box<DynEndpoint>>,
+    handle_not_found: Box<DynEndpoint>,
+    path_map: HashMap<String, HashMap<http::Method, Box<DynEndpoint>>>,
+    path_router: PathRouter<HashMap<http::Method, Box<DynEndpoint>>>,
 }
 
 impl Router {
     pub fn new() -> Self {
         Router {
             middlewares: Vec::new(),
-            handle_not_found: Some(Box::new(&not_found_endpoint)),
-            method_map: HashMap::new(),
-            all_method_router: MethodRouter::new(),
+            handle_not_found: Box::new(&not_found_endpoint),
+            path_map: HashMap::new(),
+            path_router: PathRouter::new(),
         }
     }
 
-    pub fn middleware(&mut self, m: impl Middleware) -> &mut Self {
-        self.middlewares.push(Arc::new(m));
-        self
-    }
-
     pub fn register(&mut self, method: http::Method, path: impl AsRef<str>, ep: impl Endpoint) {
-        self.method_map
-            .entry(method)
-            .or_insert_with(MethodRouter::new)
-            .add(path.as_ref(), Box::new(ep));
+        let path = path.as_ref().to_string();
+
+        self.path_map
+            .entry(path)
+            .or_insert_with(HashMap::new)
+            .insert(method, Box::new(ep));
     }
 
     register_method!(options, http::Method::OPTIONS);
@@ -56,75 +57,79 @@ impl Router {
     register_method!(connect, http::Method::CONNECT);
     register_method!(patch, http::Method::PATCH);
 
-    pub fn attach(&mut self, prefix: &str, router: Router) -> Result<(), crate::error::Error> {
+    pub fn middleware(&mut self, m: impl Middleware) -> &mut Self {
+        self.middlewares.push(Arc::new(m));
+        self
+    }
+
+    pub fn set_not_found_handler(&mut self, ep: impl Endpoint) {
+        self.handle_not_found = Box::new(ep)
+    }
+
+    #[must_use]
+    pub fn merge(
+        &mut self,
+        prefix: impl AsRef<str>,
+        router: Router,
+    ) -> Result<(), crate::error::Error> {
+        let prefix = prefix.as_ref();
         if !prefix.starts_with('/') || !prefix.ends_with('/') {
             return Err(crate::error::Error::Message(
-                "attach nested route, prefix must be a path, start with / and end with /"
+                "merge nested route, prefix must be a path, start with / and end with /"
                     .to_string(),
             ));
         }
-        let router = Arc::new(router);
 
-        let endpoint = RouterEndpoint::new(router);
+        let router = router;
+        let router = Arc::new(router.finalize());
 
         let path = prefix.to_string() + "*" + LIEWEB_NESTED_ROUTER;
 
-        self.all_method_router.add(&path, Box::new(endpoint));
+        let mut sub: HashMap<http::Method, Box<DynEndpoint>> = HashMap::new();
+
+        sub.insert(
+            METHOD_ALL.clone(),
+            Box::new(RouterEndpoint::new(router.clone())),
+        );
+
+        self.path_router.add(&path, sub);
 
         Ok(())
     }
 
-    pub(crate) fn find(&self, method: http::Method, path: &str) -> Selection {
-        if let Some(m) = self
-            .method_map
-            .get(&method)
-            .and_then(|r| r.recognize(path).ok())
-        {
-            Selection {
-                endpoint: &***m.handler(),
-                params: m.params().clone(),
+    pub(crate) fn find(&self, path: &str, method: http::Method) -> Selection {
+        if let Ok(m) = self.path_router.recognize(path) {
+            if let Some(ep) = m.handler().get(&method) {
+                return Selection {
+                    endpoint: &**ep,
+                    params: m.params().clone(),
+                };
             }
-        } else if let Ok(m) = self.all_method_router.recognize(path) {
-            Selection {
-                endpoint: &***m.handler(),
-                params: m.params().clone(),
+
+            if let Some(sub) = m.handler().get(&METHOD_ALL) {
+                return Selection {
+                    endpoint: &**sub,
+                    params: m.params().clone(),
+                };
             }
-        } else if method == http::Method::HEAD {
-            // If it is a HTTP HEAD request then check if there is a callback in the endpoints map
-            // if not then fallback to the behavior of HTTP GET else proceed as usual
-            self.find(http::Method::GET, path)
-        } else if self
-            .method_map
-            .iter()
-            .filter(|(k, _)| *k != method)
-            .any(|(_, r)| r.recognize(path).is_ok())
-        {
-            // If this `path` can be handled by a callback registered with a different HTTP method
-            // should return 405 Method Not Allowed
+
+            if m.handler().is_empty() {
+                return Selection {
+                    endpoint: &*self.handle_not_found,
+                    params: Params::new(),
+                };
+            }
+
             Selection {
                 endpoint: &method_not_allowed,
                 params: Params::new(),
-            }
-        } else {
-            match self.handle_not_found {
-                Some(ref handler) => {
-                    let endpoint = handler;
-
-                    Selection {
-                        endpoint: &**endpoint,
-                        params: Params::new(),
-                    }
-                }
-                None => Selection {
-                    endpoint: &not_found_endpoint,
-                    params: Params::new(),
-                },
-            }
+            };
         }
-    }
 
-    pub fn set_not_found_handler(&mut self, ep: impl Endpoint) {
-        self.handle_not_found = Some(Box::new(ep))
+        Selection {
+            endpoint: &*self.handle_not_found,
+            params: Params::new(),
+        }
     }
 
     pub(crate) async fn route(&self, req: Request) -> Response {
@@ -133,7 +138,7 @@ impl Router {
         let method = req.method().clone();
 
         let path = req.route_path();
-        let Selection { endpoint, params } = self.find(method, path);
+        let Selection { endpoint, params } = self.find(path, method);
 
         req.merge_params(&params);
         if let Some(rest) = params.find(LIEWEB_NESTED_ROUTER) {
@@ -146,6 +151,17 @@ impl Router {
         };
 
         next.run(req).await
+    }
+
+    pub(crate) fn finalize(mut self) -> Self {
+        let empty: HashMap<String, HashMap<http::Method, Box<DynEndpoint>>> = HashMap::new();
+        let path_map = std::mem::replace(&mut self.path_map, empty);
+
+        for (path, method_map) in path_map.into_iter() {
+            self.path_router.add(&path, method_map)
+        }
+
+        self
     }
 }
 

@@ -43,8 +43,13 @@ impl App {
         app
     }
 
-    pub fn router_mut(&mut self) -> &mut Router {
-        &mut self.router
+    #[must_use]
+    pub fn merge(
+        &mut self,
+        prefix: impl AsRef<str>,
+        router: Router,
+    ) -> Result<(), crate::error::Error> {
+        self.router.merge(prefix, router)
     }
 
     pub fn register(&mut self, method: http::Method, path: impl AsRef<str>, ep: impl Endpoint) {
@@ -61,10 +66,6 @@ impl App {
     register_method!(connect, http::Method::CONNECT);
     register_method!(patch, http::Method::PATCH);
 
-    pub fn attach(&mut self, prefix: &str, router: Router) -> Result<&mut Self, Error> {
-        self.router.attach(prefix, router).map(|_| self)
-    }
-
     pub fn middleware(&mut self, m: impl Middleware) -> &mut Self {
         self.router.middleware(m);
         self
@@ -78,7 +79,8 @@ impl App {
     pub async fn respond(self, req: impl Into<Request>) -> Response {
         let req = req.into();
         let App { router } = self;
-        let router = Arc::new(router);
+
+        let router = Arc::new(router.finalize());
 
         let endpoint = RouterEndpoint::new(router);
         endpoint.call(req).await
@@ -86,7 +88,8 @@ impl App {
 
     pub async fn run(self, addr: impl ToSocketAddrs) -> Result<(), Error> {
         let App { router } = self;
-        let router = Arc::new(router);
+
+        let router = Arc::new(router.finalize());
 
         let server = Http::new();
 
@@ -129,7 +132,8 @@ impl App {
         key: impl AsRef<Path>,
     ) -> Result<(), Error> {
         let App { router } = self;
-        let router = Arc::new(router);
+
+        let router = Arc::new(router.finalize());
 
         let server = Http::new();
 
@@ -220,7 +224,7 @@ mod test {
 
         router.get("/subtree", |_| async move { "/tree/subtree" });
 
-        app.attach("/tree/", router).unwrap();
+        app.merge("/tree/", router).unwrap();
 
         let mut req = request();
         *req.uri_mut() = "/tree/subtree".parse().unwrap();

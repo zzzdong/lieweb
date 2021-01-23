@@ -56,9 +56,9 @@ async fn main() {
 
     app.register(http::Method::GET, "/a", |_req| async move { "/a" });
 
-    app.attach("/posts/:id/", posts_router()).unwrap();
+    app.merge("/posts/:id/", posts_router()).unwrap();
 
-    app.attach("/v2/posts/", posts_router()).unwrap();
+    app.merge("/v2/posts/", posts_router()).unwrap();
 
     app.handle_not_found(not_found);
 
