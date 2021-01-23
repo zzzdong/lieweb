@@ -12,7 +12,7 @@ use crate::{Request, Response};
 const LIEWEB_NESTED_ROUTER: &str = "--lieweb-nested-router";
 
 lazy_static::lazy_static! {
-    pub static ref METHOD_ALL: http::Method = http::Method::from_bytes(b"__ALL__").unwrap();
+    pub static ref METHOD_ANY: http::Method = http::Method::from_bytes(b"__ANY__").unwrap();
 }
 
 /// The result of routing a URL
@@ -66,7 +66,6 @@ impl Router {
         self.handle_not_found = Box::new(ep)
     }
 
-    #[must_use]
     pub fn merge(
         &mut self,
         prefix: impl AsRef<str>,
@@ -87,10 +86,7 @@ impl Router {
 
         let mut sub: HashMap<http::Method, Box<DynEndpoint>> = HashMap::new();
 
-        sub.insert(
-            METHOD_ALL.clone(),
-            Box::new(RouterEndpoint::new(router.clone())),
-        );
+        sub.insert(METHOD_ANY.clone(), Box::new(RouterEndpoint::new(router)));
 
         self.path_router.add(&path, sub);
 
@@ -98,37 +94,38 @@ impl Router {
     }
 
     pub(crate) fn find(&self, path: &str, method: http::Method) -> Selection {
-        if let Ok(m) = self.path_router.recognize(path) {
-            if let Some(ep) = m.handler().get(&method) {
-                return Selection {
-                    endpoint: &**ep,
-                    params: m.params().clone(),
-                };
-            }
+        match self.path_router.recognize(path) {
+            Ok(m) => {
+                if let Some(ep) = m.handler().get(&method) {
+                    return Selection {
+                        endpoint: &**ep,
+                        params: m.params().clone(),
+                    };
+                }
 
-            if let Some(sub) = m.handler().get(&METHOD_ALL) {
-                return Selection {
-                    endpoint: &**sub,
-                    params: m.params().clone(),
-                };
-            }
+                if let Some(sub) = m.handler().get(&METHOD_ANY) {
+                    return Selection {
+                        endpoint: &**sub,
+                        params: m.params().clone(),
+                    };
+                }
 
-            if m.handler().is_empty() {
-                return Selection {
-                    endpoint: &*self.handle_not_found,
-                    params: Params::new(),
-                };
+                if m.handler().is_empty() {
+                    Selection {
+                        endpoint: &*self.handle_not_found,
+                        params: Params::new(),
+                    }
+                } else {
+                    Selection {
+                        endpoint: &method_not_allowed,
+                        params: Params::new(),
+                    }
+                }
             }
-
-            Selection {
-                endpoint: &method_not_allowed,
+            Err(_e) => Selection {
+                endpoint: &*self.handle_not_found,
                 params: Params::new(),
-            };
-        }
-
-        Selection {
-            endpoint: &*self.handle_not_found,
-            params: Params::new(),
+            },
         }
     }
 

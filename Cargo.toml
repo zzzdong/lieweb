@@ -15,7 +15,7 @@ categories = ["web-programming::http-server", "network-programming", "asynchrono
 keywords = ["web", "http", "framework", "async"]
 
 [features]
-default = ["tls"]
+default = []
 tls = [ "tokio-rustls" ]
 
 [dependencies]

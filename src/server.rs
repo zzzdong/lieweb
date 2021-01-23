@@ -10,7 +10,6 @@ use tokio::net::{TcpListener, ToSocketAddrs};
 
 use crate::error::Error;
 use crate::middleware::{Middleware, WithState};
-use crate::register_method;
 use crate::request::Request;
 use crate::router::Router;
 use crate::{
@@ -43,7 +42,6 @@ impl App {
         app
     }
 
-    #[must_use]
     pub fn merge(
         &mut self,
         prefix: impl AsRef<str>,
@@ -53,18 +51,44 @@ impl App {
     }
 
     pub fn register(&mut self, method: http::Method, path: impl AsRef<str>, ep: impl Endpoint) {
-        self.router.register(method, path, ep);
+        self.router.register(method, path, ep)
     }
 
-    register_method!(options, http::Method::OPTIONS);
-    register_method!(get, http::Method::GET);
-    register_method!(head, http::Method::HEAD);
-    register_method!(post, http::Method::POST);
-    register_method!(put, http::Method::PUT);
-    register_method!(delete, http::Method::DELETE);
-    register_method!(trace, http::Method::TRACE);
-    register_method!(connect, http::Method::CONNECT);
-    register_method!(patch, http::Method::PATCH);
+    pub fn options(&mut self, path: impl AsRef<str>, ep: impl Endpoint) {
+        self.register(http::Method::OPTIONS, path, ep)
+    }
+
+    pub fn get(&mut self, path: impl AsRef<str>, ep: impl Endpoint) {
+        self.register(http::Method::GET, path, ep)
+    }
+
+    pub fn head(&mut self, path: impl AsRef<str>, ep: impl Endpoint) {
+        self.register(http::Method::HEAD, path, ep)
+    }
+
+    pub fn post(&mut self, path: impl AsRef<str>, ep: impl Endpoint) {
+        self.register(http::Method::POST, path, ep)
+    }
+
+    pub fn put(&mut self, path: impl AsRef<str>, ep: impl Endpoint) {
+        self.register(http::Method::PUT, path, ep)
+    }
+
+    pub fn delete(&mut self, path: impl AsRef<str>, ep: impl Endpoint) {
+        self.register(http::Method::DELETE, path, ep)
+    }
+
+    pub fn trace(&mut self, path: impl AsRef<str>, ep: impl Endpoint) {
+        self.register(http::Method::TRACE, path, ep)
+    }
+
+    pub fn connect(&mut self, path: impl AsRef<str>, ep: impl Endpoint) {
+        self.register(http::Method::CONNECT, path, ep)
+    }
+
+    pub fn patch(&mut self, path: impl AsRef<str>, ep: impl Endpoint) {
+        self.register(http::Method::PATCH, path, ep)
+    }
 
     pub fn middleware(&mut self, m: impl Middleware) -> &mut Self {
         self.router.middleware(m);
@@ -203,33 +227,43 @@ mod test {
         app
     }
 
-    fn request() -> HyperRequest {
+    fn request(method: &str, uri: &str) -> HyperRequest {
         hyper::Request::builder()
-            .uri("/")
+            .uri(uri)
+            .method(method)
             .body(crate::hyper::Body::empty())
             .unwrap()
     }
 
     #[tokio::test]
     async fn basic() {
-        let resp = app().respond(request()).await;
-        assert_eq!(resp.status(), 200);
+        let mut resp = app().respond(request("GET", "/")).await;
+        assert_eq!(resp.body_bytes().await.unwrap(), b"/".to_vec())
+    }
+
+    #[tokio::test]
+    async fn basic_post() {
+        let mut resp = app().respond(request("POST", "/post")).await;
+        assert_eq!(resp.body_bytes().await.unwrap(), b"/post".to_vec())
     }
 
     #[tokio::test]
     async fn tree() {
         let mut app = app();
 
-        let mut router = Router::new();
+        let mut router_c = Router::new();
+        router_c.get("/c", |_| async move { "a-b-c" });
 
-        router.get("/subtree", |_| async move { "/tree/subtree" });
+        let mut router_b = Router::new();
+        router_b.merge("/b/", router_c).unwrap();
 
-        app.merge("/tree/", router).unwrap();
+        app.merge("/a/", router_b).unwrap();
 
-        let mut req = request();
-        *req.uri_mut() = "/tree/subtree".parse().unwrap();
-
-        let resp = app.respond(req).await;
+        let mut resp = app.respond(request("GET", "/a/b/c")).await;
         assert_eq!(resp.status(), 200);
+
+        let body = resp.body_bytes().await.unwrap();
+
+        assert_eq!(body, b"a-b-c".to_vec());
     }
 }
