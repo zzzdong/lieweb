@@ -39,6 +39,7 @@ where
 pub(crate) fn gen_random_string(length: usize) -> String {
     rand::thread_rng()
         .sample_iter(&Alphanumeric)
+        .map(char::from)
         .take(length)
         .collect::<String>()
 }

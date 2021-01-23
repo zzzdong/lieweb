@@ -1,6 +1,3 @@
-// generate tls cert
-// cd examples && openssl req -new -x509 -nodes -newkey rsa:4096 -keyout server.key -out server.crt -days 1095
-
 use std::sync::Arc;
 
 use lieweb::{http, middleware, App, Error, Request, Response};
@@ -49,7 +46,9 @@ async fn handle_form_urlencoded(mut req: Request) -> Result<Response, Error> {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt().init();
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
 
     let mut addr = DEFAULT_ADDR.to_string();
 
@@ -65,6 +64,7 @@ async fn main() {
     let mut default_headers = middleware::DefaultHeaders::new();
     default_headers.header(http::header::SERVER, lieweb::server_id());
 
+    app.middleware(middleware::RequestId);
     app.middleware(middleware::AccessLog);
     app.middleware(default_headers);
 
@@ -76,7 +76,7 @@ async fn main() {
         let msg = HelloMessage {
             message: "hello, world!".to_owned(),
         };
-        lieweb::response::json(&msg)
+        Response::with_json(&msg)
     });
 
     app.post("/form-urlencoded", handle_form_urlencoded);
@@ -88,7 +88,5 @@ async fn main() {
 
     app.handle_not_found(not_found);
 
-    app.run_with_tls(&addr, "examples/server.crt", "examples/abc.key")
-        .await
-        .unwrap();
+    app.run(&addr).await.unwrap();
 }

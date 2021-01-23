@@ -49,8 +49,8 @@ impl Response {
         s.into()
     }
 
-    pub fn with_string(s: String) -> Self {
-        s.into()
+    pub fn with_string(s: impl ToString) -> Self {
+        s.to_string().into()
     }
 
     pub fn inner(&self) -> &HyperResponse {
@@ -100,6 +100,23 @@ impl Response {
         }
 
         self
+    }
+
+    pub async fn body_bytes(&mut self) -> Result<Vec<u8>, crate::Error> {
+        use bytes::Buf;
+        use bytes::BytesMut;
+        use hyper::body::HttpBody;
+
+        let mut bufs = BytesMut::new();
+
+        while let Some(buf) = self.inner.body_mut().data().await {
+            let buf = buf?;
+            if buf.has_remaining() {
+                bufs.extend(buf);
+            }
+        }
+
+        Ok(bufs.freeze().to_vec())
     }
 }
 

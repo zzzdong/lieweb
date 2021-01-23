@@ -41,8 +41,6 @@ async fn main() {
         addr = args.nth(2).unwrap();
     }
 
-    let addr = addr.parse().unwrap();
-
     let state: Arc<Mutex<u64>> = Arc::new(Mutex::new(0));
 
     let mut app = App::with_state(state);
@@ -58,9 +56,9 @@ async fn main() {
 
     app.register(http::Method::GET, "/a", |_req| async move { "/a" });
 
-    app.attach("/posts/:id/", posts_router()).unwrap();
+    app.merge("/posts/:id/", posts_router()).unwrap();
 
-    app.attach("/v2/posts/", posts_router()).unwrap();
+    app.merge("/v2/posts/", posts_router()).unwrap();
 
     app.handle_not_found(not_found);
 
