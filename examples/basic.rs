@@ -6,34 +6,57 @@ use tokio::sync::Mutex;
 
 const DEFAULT_ADDR: &str = "127.0.0.1:5000";
 
+struct CounterMiddleware;
+
+#[lieweb::async_trait]
+impl middleware::Middleware for CounterMiddleware {
+    async fn handle<'a>(&'a self, ctx: Request, next: middleware::Next<'a>) -> Response {
+        let counter = ctx.get_state::<State>().unwrap().counter.clone();
+
+        let resp = next.run(ctx).await;
+
+        {
+            let mut counter = counter.lock().await;
+            *counter += 1;
+        }
+
+        resp
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct HelloMessage {
     message: String,
 }
 
-type State = Arc<Mutex<u64>>;
+#[derive(Clone)]
+struct State {
+    counter: Arc<Mutex<u64>>,
+    meta_data: Arc<Option<String>>,
+}
 
 async fn request_handler(req: Request) -> Response {
-    let value;
-
     let state = req.get_state::<State>().unwrap();
-
-    {
-        let mut counter = state.lock().await;
-        value = *counter;
-        *counter += 1;
-    }
 
     Response::with_html(format!(
         "got request#{} from {:?}",
-        value,
+        state.counter.lock().await,
         req.remote_addr()
     ))
 }
 
 async fn not_found(req: Request) -> Response {
-    println!("handler not found for {}", req.uri().path());
-    Response::with_status(http::StatusCode::NOT_FOUND)
+    let state = req.get_state::<State>().unwrap();
+
+    let counter = { state.counter.lock().await };
+
+    Response::with_string(format!(
+        "{:?} - got request[{}]({:?}) from {:?}",
+        state.meta_data,
+        counter,
+        req.uri(),
+        req.remote_addr()
+    ))
 }
 
 async fn handle_form_urlencoded(mut req: Request) -> Result<Response, Error> {
@@ -52,12 +75,17 @@ async fn main() {
 
     let mut addr = DEFAULT_ADDR.to_string();
 
-    let mut args = std::env::args();
-    if args.len() > 2 {
-        addr = args.nth(2).unwrap();
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() > 1 {
+        addr = args.get(1).unwrap().clone();
     }
 
-    let state: Arc<Mutex<u64>> = Arc::new(Mutex::new(0));
+    let state = State {
+        counter: Arc::new(Mutex::new(0)),
+        meta_data: Arc::new(args.get(2).cloned()),
+    };
+
+    println!("meta_data => {:?}", state.meta_data);
 
     let mut app = App::with_state(state);
 
@@ -67,6 +95,7 @@ async fn main() {
     app.middleware(middleware::RequestId);
     app.middleware(middleware::AccessLog);
     app.middleware(default_headers);
+    app.middleware(CounterMiddleware);
 
     app.register(http::Method::GET, "/", request_handler);
 
