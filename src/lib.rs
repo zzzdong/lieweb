@@ -7,9 +7,8 @@ mod router;
 mod server;
 #[cfg(feature = "tls")]
 mod tls;
-mod utils;
-mod shutdown;
 mod trace;
+mod utils;
 
 pub use error::Error;
 pub use request::{HyperRequest, Request};

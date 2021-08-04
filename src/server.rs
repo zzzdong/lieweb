@@ -5,16 +5,15 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::{future::Future, sync::Arc};
 
-use futures::future::BoxFuture;
 use hyper::http;
 use hyper::server::conn::Http;
 use hyper::service::service_fn;
 use lazy_static::lazy_static;
-use tokio::io;
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::{TcpListener, ToSocketAddrs};
 use tower::Service;
 
-use crate::{HyperRequest, HyperResponse};
+use crate::error::Error;
 use crate::middleware::{Middleware, WithState};
 use crate::request::Request;
 use crate::router::Router;
@@ -23,7 +22,9 @@ use crate::{
     endpoint::{Endpoint, RouterEndpoint},
     Response,
 };
-use crate::{error::Error, shutdown::Shutdown};
+use crate::{HyperRequest, HyperResponse};
+pub type ResponseFuture =
+    Pin<Box<dyn Future<Output = Result<HyperResponse, crate::Error>> + Send + 'static>>;
 
 lazy_static! {
     pub static ref SERVER_ID: String = format!("Lieweb {}", env!("CARGO_PKG_VERSION"));
@@ -118,6 +119,17 @@ impl App {
 
         let endpoint = RouterEndpoint::new(router);
         endpoint.call(req).await
+    }
+
+    pub fn into_service(
+        self,
+    ) -> impl Service<crate::HyperRequest, Response = crate::HyperResponse, Error = crate::Error> + Clone
+    {
+        let App { router } = self;
+
+        let router = Arc::new(router.finalize());
+
+        Server { router }
     }
 
     pub async fn run(self, addr: impl ToSocketAddrs) -> Result<(), Error> {
@@ -278,44 +290,23 @@ pub fn server_id() -> &'static str {
     &SERVER_ID
 }
 
-pub struct LieService<S> {
-    inner: S,
+#[derive(Debug, Clone)]
+struct RemoteInfo {
+    pub addr: Option<SocketAddr>,
+}
+
+impl RemoteInfo {
+    pub fn new(addr: Option<SocketAddr>) -> Self {
+        RemoteInfo { addr }
+    }
+}
+
+#[derive(Clone)]
+pub struct Server {
     router: Arc<Router>,
-    remote_addr: SocketAddr,
 }
 
-impl<S> LieService<S> {
-    pub fn new(inner: S, router: Arc<Router>, remote_addr: SocketAddr) -> Self {
-        LieService {
-            inner,
-            router,
-            remote_addr,
-        }
-    }
-
-    fn handle_error(e: impl std::error::Error) -> Response {
-        Response {
-            inner: hyper::Response::builder()
-                .status(500)
-                .body(hyper::Body::from(format!("{:?}", e)))
-                .unwrap(),
-        }
-    }
-}
-
-// impl Clone for LieService {
-//     fn clone(&self) -> Self {
-//         LieService {
-//             router: self.router.clone(),
-//             remote_addr: self.remote_addr,
-//         }
-//     }
-// }
-
-impl<S> Service<crate::HyperRequest> for LieService<S> 
-    where  
-        S: tower::Service<HyperRequest, Response = HyperResponse>,
-{
+impl Service<crate::HyperRequest> for Server {
     type Response = crate::HyperResponse;
     type Error = crate::Error;
     type Future =
@@ -325,8 +316,10 @@ impl<S> Service<crate::HyperRequest> for LieService<S>
         Ok(()).into()
     }
 
-    fn call(&mut self, req: crate::HyperRequest) -> Self::Future {
-        let req = Request::new(req, Some(self.remote_addr));
+    fn call(&mut self, mut req: crate::HyperRequest) -> Self::Future {
+        let info = req.extensions_mut().remove::<RemoteInfo>();
+
+        let req = Request::new(req, info.and_then(|info| info.addr));
 
         let router = self.router.clone();
 
@@ -341,28 +334,26 @@ impl<S> Service<crate::HyperRequest> for LieService<S>
 }
 
 #[derive(Clone, Debug)]
-pub struct ServeHttp<S> {
+pub struct ConnService<S> {
     inner: S,
     server: HttpServer,
     drain: drain::Watch,
-    router: Arc<Router>,
 }
 
-impl<S> ServeHttp<S> {
-    pub fn new(svc: S, server: HttpServer, drain: drain::Watch, router: Arc<Router>) -> Self {
-        ServeHttp {
+impl<S> ConnService<S> {
+    pub fn new(svc: S, server: HttpServer, drain: drain::Watch) -> Self {
+        ConnService {
             inner: svc,
             server,
             drain,
-            router,
         }
     }
 }
 
-impl<I, S> Service<I> for ServeHttp<S>
+impl<I, S> Service<I> for ConnService<S>
 where
-    I: io::AsyncRead + io::AsyncWrite + RemoteAddr + Send + Unpin + 'static,
-    S: Service<crate::HyperRequest, Response = crate::HyperResponse, Error = hyper::Error>
+    I: AsyncRead + AsyncWrite + RemoteAddr + Send + Unpin + 'static,
+    S: Service<crate::HyperRequest, Response = crate::HyperResponse, Error = crate::Error>
         + Clone
         + Unpin
         + Send
@@ -379,14 +370,15 @@ where
 
     fn call(&mut self, io: I) -> Self::Future {
         let Self {
-            server,
             inner,
+            server,
             drain,
-            router,
         } = self.clone();
 
         Box::pin(async move {
-            let mut conn = server.serve_connection(io, inner);
+            let remote_addr = io.remote_addr();
+            let svc = AppendInfoService::new(inner, RemoteInfo::new(remote_addr));
+            let mut conn = server.serve_connection(io, svc);
             tokio::select! {
                 res = &mut conn => {
                     tracing::debug!(?res, "The client is shutting down the connection");
@@ -403,21 +395,65 @@ where
     }
 }
 
-
 pub trait RemoteAddr {
-    fn remote_addr(&self) -> std::io::Result<SocketAddr>;
+    fn remote_addr(&self) -> Option<SocketAddr>;
 }
 
 impl RemoteAddr for tokio::net::TcpStream {
-    fn remote_addr(&self) -> std::io::Result<SocketAddr> {
-        tokio::net::TcpStream::peer_addr(self)
+    fn remote_addr(&self) -> Option<SocketAddr> {
+        self.peer_addr().ok()
+    }
+}
+
+impl RemoteAddr for tokio::net::UnixStream {
+    fn remote_addr(&self) -> Option<SocketAddr> {
+        None
     }
 }
 
 #[cfg(feature = "tls")]
 impl<T: RemoteAddr> RemoteAddr for tokio_rustls::server::TlsStream<T> {
-    fn peer_addr(&self) -> std::io::Result<SocketAddr> {
-        self.get_ref().0.peer_addr()
+    fn peer_addr(&self) -> Option<SocketAddr> {
+        self.get_ref().0.peer_addr().ok()
+    }
+}
+
+#[derive(Clone, Debug)]
+struct AppendInfoService<S, T> {
+    inner: S,
+    info: T,
+}
+
+impl<S, T> AppendInfoService<S, T> {
+    pub fn new(inner: S, info: T) -> Self {
+        AppendInfoService { inner, info }
+    }
+}
+
+impl<S, T> Service<HyperRequest> for AppendInfoService<S, T>
+where
+    S: Service<HyperRequest, Response = HyperResponse, Error = crate::Error>
+        + Clone
+        + Unpin
+        + Send
+        + 'static,
+    S::Future: Send + 'static,
+    T: Clone + Send + Sync + 'static,
+{
+    type Response = HyperResponse;
+    type Error = crate::Error;
+    type Future = ResponseFuture;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, mut req: HyperRequest) -> Self::Future {
+        let AppendInfoService { mut inner, info } = self.clone();
+
+        req.extensions_mut().insert(info);
+
+        Box::pin(Service::call(&mut inner, req))
     }
 }
 
