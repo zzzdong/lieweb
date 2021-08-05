@@ -24,7 +24,6 @@ pub(crate) struct Selection<'a> {
 pub struct Router {
     middlewares: Vec<Arc<dyn Middleware>>,
     handle_not_found: Box<DynEndpoint>,
-    path_map: HashMap<String, HashMap<http::Method, Box<DynEndpoint>>>,
     path_router: PathRouter<HashMap<http::Method, Box<DynEndpoint>>>,
 }
 
@@ -33,17 +32,13 @@ impl Router {
         Router {
             middlewares: Vec::new(),
             handle_not_found: Box::new(&not_found_endpoint),
-            path_map: HashMap::new(),
             path_router: PathRouter::new(),
         }
     }
 
     pub fn register(&mut self, method: http::Method, path: impl AsRef<str>, ep: impl Endpoint) {
-        let path = path.as_ref().to_string();
-
-        self.path_map
-            .entry(path)
-            .or_insert_with(HashMap::new)
+        self.path_router
+            .at_or_default(path.as_ref())
             .insert(method, Box::new(ep));
     }
 
@@ -69,7 +64,7 @@ impl Router {
     pub fn merge(
         &mut self,
         prefix: impl AsRef<str>,
-        router: Router,
+        sub: Router,
     ) -> Result<(), crate::error::Error> {
         let prefix = prefix.as_ref();
         if !prefix.starts_with('/') || !prefix.ends_with('/') {
@@ -79,16 +74,16 @@ impl Router {
             ));
         }
 
-        let router = router;
-        let router = Arc::new(router.finalize());
-
         let path = prefix.to_string() + "*" + LIEWEB_NESTED_ROUTER;
 
-        let mut sub: HashMap<http::Method, Box<DynEndpoint>> = HashMap::new();
+        let mut sub_router: HashMap<http::Method, Box<DynEndpoint>> = HashMap::new();
 
-        sub.insert(METHOD_ANY.clone(), Box::new(RouterEndpoint::new(router)));
+        sub_router.insert(
+            METHOD_ANY.clone(),
+            Box::new(RouterEndpoint::new(Arc::new(sub))),
+        );
 
-        self.path_router.add(&path, sub);
+        self.path_router.add(&path, sub_router);
 
         Ok(())
     }
@@ -148,17 +143,6 @@ impl Router {
         };
 
         next.run(req).await
-    }
-
-    pub(crate) fn finalize(mut self) -> Self {
-        let empty: HashMap<String, HashMap<http::Method, Box<DynEndpoint>>> = HashMap::new();
-        let path_map = std::mem::replace(&mut self.path_map, empty);
-
-        for (path, method_map) in path_map.into_iter() {
-            self.path_router.add(&path, method_map)
-        }
-
-        self
     }
 }
 

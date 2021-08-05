@@ -48,3 +48,7 @@ serde = { version="1.0", features=["derive"] }
 [[example]]
 name = "tls"
 required-features = ["tls"]
+
+
+[patch.crates-io]
+route-recognizer = {git="https://github.com/zzzdong/route-recognizer.git", branch="add-at_or_default"}

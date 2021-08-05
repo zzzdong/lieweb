@@ -104,7 +104,7 @@ impl App {
         let req = req.into();
         let App { router } = self;
 
-        let router = Arc::new(router.finalize());
+        let router = Arc::new(router);
 
         let endpoint = RouterEndpoint::new(router);
         endpoint.call(req).await
@@ -113,7 +113,7 @@ impl App {
     pub async fn run(self, addr: impl ToSocketAddrs) -> Result<(), Error> {
         let App { router } = self;
 
-        let router = Arc::new(router.finalize());
+        let router = Arc::new(router);
 
         let server = Http::new();
 
