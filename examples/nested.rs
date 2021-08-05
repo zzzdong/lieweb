@@ -81,8 +81,7 @@ fn posts_router() -> Router {
     });
 
     posts.set_not_found_handler(|_req| async move {
-        let resp = Response::with_html("posts handler Not Found");
-        resp.set_status(http::StatusCode::NOT_FOUND)
+        Response::with_html("posts handler Not Found").set_status(http::StatusCode::NOT_FOUND)
     });
 
     posts

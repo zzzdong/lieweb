@@ -1,12 +1,13 @@
 use std::borrow::Cow;
 use std::convert::TryFrom;
 
+use bytes::Bytes;
+use futures::Stream;
 use hyper::http::{
     self,
     header::{HeaderMap, HeaderName, HeaderValue},
     StatusCode,
 };
-
 pub type HyperResponse = http::Response<hyper::Body>;
 
 pub struct Response {
@@ -19,7 +20,8 @@ impl Response {
     }
 
     pub fn with_status(status: StatusCode) -> Self {
-        Self::new().set_status(status)
+        let resp = Self::new();
+        resp.set_status(status)
     }
 
     pub fn with_html<T>(body: T) -> Self
@@ -51,6 +53,36 @@ impl Response {
 
     pub fn with_string(s: impl ToString) -> Self {
         s.to_string().into()
+    }
+
+    pub fn with_stream<S, B, E>(s: S, content_type: mime::Mime) -> Self
+    where
+        S: Stream<Item = Result<B, E>> + Send + 'static,
+        B: Into<Bytes> + 'static,
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        WithStream::new(s, content_type).into()
+    }
+
+    pub async fn send_file(path: impl AsRef<std::path::Path>) -> Result<Self, crate::Error> {
+        match tokio::fs::File::open(path.as_ref()).await {
+            Ok(file) => {
+                let s =
+                    tokio_util::codec::FramedRead::new(file, tokio_util::codec::BytesCodec::new());
+
+                let resp =
+                    Response::with_stream(s, mime_guess::from_path(path).first_or_octet_stream());
+
+                Ok(resp)
+            }
+            Err(err) => {
+                if err.kind() == std::io::ErrorKind::NotFound {
+                    Ok(Response::with_status(StatusCode::NOT_FOUND))
+                } else {
+                    Err(err.into())
+                }
+            }
+        }
     }
 
     pub fn inner(&self) -> &HyperResponse {
@@ -102,6 +134,29 @@ impl Response {
         self
     }
 
+    pub fn append_header<K, V>(mut self, name: K, value: V) -> Self
+    where
+        HeaderName: TryFrom<K>,
+        <HeaderName as TryFrom<K>>::Error: Into<http::Error>,
+        HeaderValue: TryFrom<V>,
+        <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
+    {
+        match crate::utils::parse_header(name, value) {
+            Ok((name, value)) => {
+                self.inner.headers_mut().append(name, value);
+            }
+            Err(e) => {
+                tracing::error!("with_header error: {}", e);
+            }
+        }
+
+        self
+    }
+
+    pub fn append_cookie(self, cookie: crate::Cookie) -> Self {
+        self.append_header(http::header::SET_COOKIE, cookie.to_string())
+    }
+
     pub async fn body_bytes(&mut self) -> Result<Vec<u8>, crate::Error> {
         use bytes::Buf;
         use bytes::BytesMut;
@@ -132,9 +187,9 @@ impl From<HyperResponse> for Response {
     }
 }
 
-impl Into<HyperResponse> for Response {
-    fn into(self) -> HyperResponse {
-        let Response { inner } = self;
+impl From<Response> for HyperResponse {
+    fn from(resp: Response) -> Self {
+        let Response { inner } = resp;
         inner
     }
 }
@@ -289,5 +344,38 @@ impl From<Json> for Response {
             });
 
         resp.into()
+    }
+}
+
+pub struct WithStream<S> {
+    s: S,
+    content_type: mime::Mime,
+}
+
+impl<S, B, E> WithStream<S>
+where
+    S: Stream<Item = Result<B, E>> + Send + 'static,
+    B: Into<Bytes> + 'static,
+    E: std::error::Error + Send + Sync + 'static,
+{
+    pub fn new(s: S, content_type: mime::Mime) -> Self {
+        WithStream { s, content_type }
+    }
+}
+
+impl<S, B, E> From<WithStream<S>> for Response
+where
+    S: Stream<Item = Result<B, E>> + Send + 'static,
+    B: Into<Bytes> + 'static,
+    E: std::error::Error + Send + Sync + 'static,
+{
+    fn from(val: WithStream<S>) -> Response {
+        let WithStream { s, content_type } = val;
+
+        http::Response::builder()
+            .header(hyper::header::CONTENT_TYPE, content_type.to_string())
+            .body(hyper::Body::wrap_stream(s))
+            .unwrap()
+            .into()
     }
 }

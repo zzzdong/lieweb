@@ -21,12 +21,14 @@ tls = [ "tokio-rustls" ]
 [dependencies]
 async-trait = "0.1"
 bytes = "1.0"
+cookie = "0.15"
 futures = "0.3"
 futures-util = "0.3"
 headers = "0.3"
 hyper = { version="0.14", features=["server", "http1", "http2", "stream"] }
 lazy_static = "1.4"
 mime = "0.3"
+mime_guess = "2.0"
 rand = "0.8"
 route-recognizer = "0.3"
 serde = "1.0"
@@ -35,6 +37,7 @@ serde_urlencoded = "0.7"
 thiserror = "1.0"
 tokio = "1.0"
 tokio-rustls = { version="0.22", optional=true }
+tokio-util = "0.6"
 tracing = "0.1"
 
 [dev-dependencies]

@@ -86,6 +86,10 @@ async fn main() {
         format!("you are editing post<{}>", id)
     });
 
+    app.get("/readme", |_req: Request| async move {
+        Response::send_file("READMEx.md").await
+    });
+
     app.handle_not_found(not_found);
 
     app.run(&addr).await.unwrap();
