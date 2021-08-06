@@ -9,10 +9,24 @@ use crate::middleware::{Middleware, Next};
 use crate::register_method;
 use crate::{Request, Response};
 
+type MethodRoute = HashMap<http::Method, Box<DynEndpoint>>;
+
 const LIEWEB_NESTED_ROUTER: &str = "--lieweb-nested-router";
 
 lazy_static::lazy_static! {
     pub static ref METHOD_ANY: http::Method = http::Method::from_bytes(b"__ANY__").unwrap();
+}
+
+enum Route {
+    Method(MethodRoute),
+    Sub(RouterEndpoint),
+    Empty,
+}
+
+impl Default for Route {
+    fn default() -> Self {
+        Route::Empty
+    }
 }
 
 /// The result of routing a URL
@@ -24,7 +38,7 @@ pub(crate) struct Selection<'a> {
 pub struct Router {
     middlewares: Vec<Arc<dyn Middleware>>,
     handle_not_found: Box<DynEndpoint>,
-    path_router: PathRouter<HashMap<http::Method, Box<DynEndpoint>>>,
+    path_router: PathRouter<Route>,
 }
 
 impl Router {
@@ -37,9 +51,18 @@ impl Router {
     }
 
     pub fn register(&mut self, method: http::Method, path: impl AsRef<str>, ep: impl Endpoint) {
-        self.path_router
-            .at_or_default(path.as_ref())
-            .insert(method, Box::new(ep));
+        let route = self.path_router.at_or_default(path.as_ref());
+        match route {
+            Route::Method(m) => {
+                m.insert(method, Box::new(ep));
+            }
+            Route::Empty => {
+                let mut map: MethodRoute = HashMap::new();
+                map.insert(method, Box::new(ep));
+                *route = Route::Method(map);
+            }
+            _ => unreachable!(),
+        }
     }
 
     register_method!(options, http::Method::OPTIONS);
@@ -76,47 +99,44 @@ impl Router {
 
         let path = prefix.to_string() + "*" + LIEWEB_NESTED_ROUTER;
 
-        let mut sub_router: HashMap<http::Method, Box<DynEndpoint>> = HashMap::new();
+        let sub_router = RouterEndpoint::new(Arc::new(sub));
 
-        sub_router.insert(
-            METHOD_ANY.clone(),
-            Box::new(RouterEndpoint::new(Arc::new(sub))),
-        );
-
-        self.path_router.add(&path, sub_router);
+        self.path_router.add(&path, Route::Sub(sub_router));
 
         Ok(())
     }
 
     pub(crate) fn find(&self, path: &str, method: http::Method) -> Selection {
         match self.path_router.recognize(path) {
-            Ok(m) => {
-                if let Some(ep) = m.handler().get(&method) {
-                    return Selection {
-                        endpoint: &**ep,
-                        params: m.params().clone(),
-                    };
-                }
-
-                if let Some(sub) = m.handler().get(&METHOD_ANY) {
-                    return Selection {
-                        endpoint: &**sub,
-                        params: m.params().clone(),
-                    };
-                }
-
-                if m.handler().is_empty() {
-                    Selection {
-                        endpoint: &*self.handle_not_found,
-                        params: Params::new(),
+            Ok(m) => match m.handler() {
+                Route::Method(map) => {
+                    if let Some(ep) = map.get(&method) {
+                        return Selection {
+                            endpoint: &**ep,
+                            params: m.params().clone(),
+                        };
                     }
-                } else {
-                    Selection {
-                        endpoint: &method_not_allowed,
-                        params: Params::new(),
+                    if map.is_empty() {
+                        Selection {
+                            endpoint: &*self.handle_not_found,
+                            params: Params::new(),
+                        }
+                    } else {
+                        Selection {
+                            endpoint: &method_not_allowed,
+                            params: Params::new(),
+                        }
                     }
                 }
-            }
+                Route::Sub(sub) => Selection {
+                    endpoint: sub,
+                    params: m.params().clone(),
+                },
+                Route::Empty => Selection {
+                    endpoint: &*self.handle_not_found,
+                    params: Params::new(),
+                },
+            },
             Err(_e) => Selection {
                 endpoint: &*self.handle_not_found,
                 params: Params::new(),
