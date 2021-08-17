@@ -27,7 +27,7 @@ pub enum Error {
     #[error("missing cookie {name:?}")]
     MissingCookie { name: String },
     #[error("missing header {name:?}")]
-    MissingHeaader { name: String },
+    MissingHeader { name: String },
 }
 
 impl<'a> From<&'a str> for Error {
@@ -79,7 +79,7 @@ pub fn missing_cookie(name: impl ToString) -> Error {
 }
 
 pub fn missing_header(name: impl ToString) -> Error {
-    Error::MissingHeaader {
+    Error::MissingHeader {
         name: name.to_string(),
     }
 }
