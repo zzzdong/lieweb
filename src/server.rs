@@ -11,13 +11,10 @@ use tokio::net::{TcpListener, ToSocketAddrs};
 use crate::endpoint::Handler;
 use crate::error::Error;
 use crate::middleware::{Middleware, WithState};
-use crate::{register_method, HyperRequest, HyperResponse};
-use crate::request::ReqCtx;
+use crate::{register_method, Response};
+use crate::request::{Request, ReqCtx};
 use crate::router::Router;
-use crate::{
-    endpoint::{Endpoint, RouterEndpoint},
-    Response,
-};
+use crate::endpoint::{Endpoint, RouterEndpoint};
 
 lazy_static! {
     pub static ref SERVER_ID: String = format!("Lieweb {}", env!("CARGO_PKG_VERSION"));
@@ -84,7 +81,7 @@ impl App {
         self
     }
 
-    pub async fn respond(self, req: HyperRequest) -> HyperResponse {
+    pub async fn respond(self, req: Request) -> Response {
         let req = req.into();
         let App { router } = self;
 
@@ -200,7 +197,7 @@ pub fn server_id() -> &'static str {
 
 #[cfg(test)]
 mod test {
-    use crate::{App, HyperRequest, Router};
+    use crate::{App, Request, Router};
 
     // fn app() -> App {
     //     let mut app = App::new();
@@ -211,7 +208,7 @@ mod test {
     //     app
     // }
 
-    fn request(method: &str, uri: &str) -> HyperRequest {
+    fn request(method: &str, uri: &str) -> Request {
         hyper::Request::builder()
             .uri(uri)
             .method(method)

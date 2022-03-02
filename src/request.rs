@@ -10,7 +10,7 @@ use hyper::http::{
 use route_recognizer::Params;
 use serde::de::DeserializeOwned;
 
-pub type HyperRequest = hyper::Request<hyper::Body>;
+pub type Request = hyper::Request<hyper::Body>;
 
 use crate::error::{
     invalid_header, invalid_param, missing_appstate, missing_cookie, missing_header, missing_param,
@@ -31,7 +31,7 @@ pub struct RequestParts {
 }
 
 impl RequestParts {
-    pub fn new(req: HyperRequest) -> Self {
+    pub fn new(req: Request) -> Self {
         let (parts, body) = req.into_parts();
         RequestParts {
             parts,
@@ -55,7 +55,7 @@ pub(crate) struct ReqCtx {
 }
 
 impl ReqCtx {
-    pub(crate) fn init(request: &mut HyperRequest, remote_addr: Option<SocketAddr>) {
+    pub(crate) fn init(request: &mut Request, remote_addr: Option<SocketAddr>) {
         let ctx = ReqCtx {
             params: Params::new(),
             remote_addr,
@@ -65,20 +65,20 @@ impl ReqCtx {
         request.extensions_mut().insert(ctx);
     }
 
-    pub(crate) fn get(req: &HyperRequest) -> &Self {
+    pub(crate) fn get(req: &Request) -> &Self {
         req.extensions()
             .get::<ReqCtx>()
             .expect("can not get ReqCtx from req.extensions()")
     }
 
-    pub(crate) fn get_mut(req: &mut HyperRequest) -> &mut Self {
+    pub(crate) fn get_mut(req: &mut Request) -> &mut Self {
         req.extensions_mut()
             .get_mut::<ReqCtx>()
             .expect("can not get ReqCtx from req.extensions()")
     }
 }
 
-impl RequestCtx for HyperRequest {
+impl RequestCtx for Request {
     fn remote_addr(&self) -> Option<SocketAddr> {
         match self.extensions().get::<ReqCtx>() {
             Some(r) => r.remote_addr.clone(),

@@ -4,11 +4,12 @@ use std::sync::Arc;
 use hyper::http;
 use route_recognizer::{Params, Router as PathRouter};
 
-use crate::endpoint::{DynEndpoint, Endpoint, Handler, IntoEndpoint, RouterEndpoint};
+use crate::endpoint::{DynEndpoint, Handler, RouterEndpoint};
 use crate::middleware::{Middleware, Next};
-use crate::request::RequestCtx;
+use crate::request::{Request, RequestCtx};
 use crate::Response;
-use crate::{register_method, HyperRequest, HyperResponse};
+use crate::response::LieResponse;
+use crate::register_method;
 
 type MethodRoute = HashMap<http::Method, Box<DynEndpoint>>;
 
@@ -189,7 +190,7 @@ impl Router {
         }
     }
 
-    pub(crate) async fn route(&self, req: HyperRequest) -> HyperResponse {
+    pub(crate) async fn route(&self, req: Request) -> Response {
         let mut req = req;
 
         let method = req.method().clone();
@@ -227,10 +228,10 @@ impl std::fmt::Debug for Router {
     }
 }
 
-async fn not_found_endpoint(_ctx: HyperRequest) -> HyperResponse {
-    Response::from(http::StatusCode::NOT_FOUND).into()
+async fn not_found_endpoint(_ctx: Request) -> Response {
+    LieResponse::from(http::StatusCode::NOT_FOUND).into()
 }
 
-async fn method_not_allowed(_ctx: HyperRequest) -> HyperResponse {
-    Response::from(http::StatusCode::METHOD_NOT_ALLOWED).into()
+async fn method_not_allowed(_ctx: Request) -> Response {
+    LieResponse::from(http::StatusCode::METHOD_NOT_ALLOWED).into()
 }

@@ -8,21 +8,23 @@ use hyper::http::{
     header::{HeaderMap, HeaderName, HeaderValue},
     StatusCode,
 };
-pub type HyperResponse = http::Response<hyper::Body>;
+
+
+pub type Response = http::Response<hyper::Body>;
 
 
 pub trait IntoResponse {
-    fn into_response(self) -> HyperResponse;
+    fn into_response(self) -> Response;
 }
 
 
-pub struct Response {
-    pub(crate) inner: HyperResponse,
+pub struct LieResponse {
+    pub(crate) inner: Response,
 }
 
-impl Response {
+impl LieResponse {
     pub fn new() -> Self {
-        HyperResponse::default().into()
+        LieResponse::default().into()
     }
 
     pub fn with_status(status: StatusCode) -> Self {
@@ -77,13 +79,13 @@ impl Response {
                     tokio_util::codec::FramedRead::new(file, tokio_util::codec::BytesCodec::new());
 
                 let resp =
-                    Response::with_stream(s, mime_guess::from_path(path).first_or_octet_stream());
+                    LieResponse::with_stream(s, mime_guess::from_path(path).first_or_octet_stream());
 
                 Ok(resp)
             }
             Err(err) => {
                 if err.kind() == std::io::ErrorKind::NotFound {
-                    Ok(Response::with_status(StatusCode::NOT_FOUND))
+                    Ok(LieResponse::with_status(StatusCode::NOT_FOUND))
                 } else {
                     Err(err.into())
                 }
@@ -91,11 +93,11 @@ impl Response {
         }
     }
 
-    pub fn inner(&self) -> &HyperResponse {
+    pub fn inner(&self) -> &Response {
         &self.inner
     }
 
-    pub fn inner_mut(&mut self) -> &mut HyperResponse {
+    pub fn inner_mut(&mut self) -> &mut Response {
         &mut self.inner
     }
 
@@ -111,7 +113,7 @@ impl Response {
         self.inner.headers_mut()
     }
 
-    pub fn into_hyper_response(self) -> HyperResponse {
+    pub fn into_hyper_response(self) -> Response {
         let Self { inner } = self;
         inner
     }
@@ -181,32 +183,32 @@ impl Response {
     }
 }
 
-impl Default for Response {
+impl Default for LieResponse {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl From<HyperResponse> for Response {
-    fn from(response: HyperResponse) -> Self {
-        Response { inner: response }
+impl From<Response> for LieResponse {
+    fn from(response: Response) -> Self {
+        LieResponse { inner: response }
     }
 }
 
-impl From<Response> for HyperResponse {
-    fn from(resp: Response) -> Self {
-        let Response { inner } = resp;
+impl From<LieResponse> for Response {
+    fn from(resp: LieResponse) -> Self {
+        let LieResponse { inner } = resp;
         inner
     }
 }
 
-impl From<StatusCode> for Response {
+impl From<StatusCode> for LieResponse {
     fn from(val: StatusCode) -> Self {
         Self::with_status(val)
     }
 }
 
-impl From<&'static [u8]> for Response {
+impl From<&'static [u8]> for LieResponse {
     fn from(val: &'static [u8]) -> Self {
         http::Response::builder()
             .header(
@@ -219,7 +221,7 @@ impl From<&'static [u8]> for Response {
     }
 }
 
-impl From<Vec<u8>> for Response {
+impl From<Vec<u8>> for LieResponse {
     fn from(val: Vec<u8>) -> Self {
         http::Response::builder()
             .header(
@@ -232,7 +234,7 @@ impl From<Vec<u8>> for Response {
     }
 }
 
-impl From<&'static str> for Response {
+impl From<&'static str> for LieResponse {
     fn from(val: &'static str) -> Self {
         http::Response::builder()
             .header(
@@ -245,7 +247,7 @@ impl From<&'static str> for Response {
     }
 }
 
-impl From<String> for Response {
+impl From<String> for LieResponse {
     fn from(val: String) -> Self {
         http::Response::builder()
             .header(
@@ -258,7 +260,7 @@ impl From<String> for Response {
     }
 }
 
-impl From<Cow<'static, str>> for Response {
+impl From<Cow<'static, str>> for LieResponse {
     fn from(val: Cow<'static, str>) -> Self {
         match val {
             Cow::Borrowed(s) => s.into(),
@@ -267,9 +269,9 @@ impl From<Cow<'static, str>> for Response {
     }
 }
 
-impl<E, R> From<Result<R, E>> for Response
+impl<E, R> From<Result<R, E>> for LieResponse
 where
-    R: Into<Response>,
+    R: Into<LieResponse>,
     E: std::error::Error + 'static + Send + Sync,
 {
     fn from(val: Result<R, E>) -> Self {
@@ -300,12 +302,12 @@ where
     Html { body }
 }
 
-impl<T> From<Html<T>> for Response
+impl<T> From<Html<T>> for LieResponse
 where
     hyper::Body: From<T>,
     T: Send,
 {
-    fn from(val: Html<T>) -> Response {
+    fn from(val: Html<T>) -> LieResponse {
         http::Response::builder()
             .header(
                 hyper::header::CONTENT_TYPE,
@@ -330,9 +332,9 @@ where
     }
 }
 
-impl From<Json> for Response {
-    fn from(val: Json) -> Response {
-        let resp: Result<Response, _> = val
+impl From<Json> for LieResponse {
+    fn from(val: Json) -> LieResponse {
+        let resp: Result<LieResponse, _> = val
             .inner
             .map(|j| {
                 http::Response::builder()
@@ -369,13 +371,13 @@ where
     }
 }
 
-impl<S, B, E> From<WithStream<S>> for Response
+impl<S, B, E> From<WithStream<S>> for LieResponse
 where
     S: Stream<Item = Result<B, E>> + Send + 'static,
     B: Into<Bytes> + 'static,
     E: std::error::Error + Send + Sync + 'static,
 {
-    fn from(val: WithStream<S>) -> Response {
+    fn from(val: WithStream<S>) -> LieResponse {
         let WithStream { s, content_type } = val;
 
         http::Response::builder()

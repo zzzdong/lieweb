@@ -6,7 +6,7 @@ use crate::http::{
 };
 use crate::{
     middleware::{Middleware, Next},
-    HyperRequest, HyperResponse,
+    Request, Response,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -38,8 +38,8 @@ impl DefaultHeaders {
         }
     }
 
-    async fn append_header<'a>(&'a self, ctx: HyperRequest, next: Next<'a>) -> HyperResponse {
-        let mut resp: HyperResponse = next.run(ctx).await;
+    async fn append_header<'a>(&'a self, ctx: Request, next: Next<'a>) -> Response {
+        let mut resp: Response = next.run(ctx).await;
 
         let headers = resp.headers_mut();
         for (k, v) in &self.headers {
@@ -52,7 +52,7 @@ impl DefaultHeaders {
 
 #[crate::async_trait]
 impl Middleware for DefaultHeaders {
-    async fn handle<'a>(&'a self, ctx: HyperRequest, next: Next<'a>) -> HyperResponse {
+    async fn handle<'a>(&'a self, ctx: Request, next: Next<'a>) -> Response {
         self.append_header(ctx, next).await
     }
 }

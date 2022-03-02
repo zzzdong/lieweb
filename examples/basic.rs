@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use lieweb::{http, middleware, App, Error, Response, HyperRequest};
+use lieweb::{http, middleware, App, Error, Response, Request};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
@@ -13,7 +13,7 @@ struct HelloMessage {
 
 type State = Arc<Mutex<u64>>;
 
-async fn request_handler(req: HyperRequest) -> Response {
+async fn request_handler(req: Request) -> Response {
     let value;
 
     let state = req.get_state::<State>().unwrap();

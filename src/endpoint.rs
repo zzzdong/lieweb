@@ -6,24 +6,24 @@ use std::sync::Arc;
 use crate::request::{FromRequest, RequestParts};
 use crate::response::IntoResponse;
 use crate::router::Router;
-use crate::{HyperRequest, HyperResponse, Response, Error};
+use crate::{Request, Response, Error};
 
 pub(crate) type DynEndpoint = dyn Endpoint;
 
 #[crate::async_trait]
 pub trait Endpoint: Send + Sync + 'static {
     /// Invoke the endpoint within the given context
-    async fn call(&self, req: HyperRequest) -> HyperResponse;
+    async fn call(&self, req: Request) -> Response;
 }
 
 #[crate::async_trait]
 impl<F: Send + Sync + 'static, Fut, Res> Endpoint for F
 where
-    F: Fn(HyperRequest) -> Fut,
+    F: Fn(Request) -> Fut,
     Fut: Future<Output = Res> + Send + 'static,
     Res: Into<Response> + 'static,
 {
-    async fn call(&self, req: HyperRequest) -> HyperResponse {
+    async fn call(&self, req: Request) -> Response {
         let resp = self(req).await;
         resp.into().into()
     }
@@ -49,7 +49,7 @@ impl<H, T> Endpoint for IntoEndpoint<H, T>
         H: Handler<T> + Clone + Send + Sync + 'static,
         T: 'static
 {
-    async fn call(&self, req: HyperRequest) -> HyperResponse {
+    async fn call(&self, req: Request) -> Response {
         let handler = self.handler.clone();
 
         let resp = Handler::call(handler, req).await;
@@ -62,7 +62,7 @@ impl<H, T> Endpoint for IntoEndpoint<H, T>
 
 #[crate::async_trait]
 pub trait Handler<T>: Clone + Send + Sized + 'static {
-    async fn call(self, req: HyperRequest) -> HyperResponse;
+    async fn call(self, req: Request) -> Response;
 
     fn into_endpoint(self) -> IntoEndpoint<Self, T> {
         IntoEndpoint::new(self)
@@ -76,7 +76,7 @@ where
     Fut: Future<Output = Res> + Send,
     Res: IntoResponse + Send + 'static,
 {
-    async fn call(self, req: HyperRequest) -> HyperResponse {
+    async fn call(self, req: Request) -> Response {
         self().await.into_response()
     }
 }
@@ -92,7 +92,7 @@ macro_rules! impl_handler {
             Res: IntoResponse,
             $( $ty: FromRequest + Send,)*
         {
-            async fn call(self, req: HyperRequest) -> HyperResponse {
+            async fn call(self, req: Request) -> Response {
                 let mut req = RequestParts::new(req);
 
                 $(
@@ -139,7 +139,7 @@ impl RouterEndpoint {
 
 #[crate::async_trait]
 impl Endpoint for RouterEndpoint {
-    async fn call(&self, req: HyperRequest) -> HyperResponse {
+    async fn call(&self, req: Request) -> Response {
         self.router.route(req).await
     }
 }

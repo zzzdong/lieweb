@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     middleware::{Middleware, Next},
-    HyperRequest, HyperResponse,
+    Request, Response,
 };
 
 #[derive(Debug, Clone)]
@@ -19,19 +19,19 @@ impl<T: Send + Sync + 'static> WithState<T> {
         }
     }
 
-    async fn append_extension<'a>(&'a self, mut ctx: HyperRequest, next: Next<'a>) -> HyperResponse {
+    async fn append_extension<'a>(&'a self, mut ctx: Request, next: Next<'a>) -> Response {
         ctx.extensions_mut().insert(self.extension.clone());
         next.run(ctx).await
     }
 
-    pub(crate) fn get_state(ctx: &HyperRequest) -> Option<&T> {
+    pub(crate) fn get_state(ctx: &Request) -> Option<&T> {
         ctx.extensions().get::<AppState<T>>().map(|o| o.inner.as_ref())
     }
 }
 
 #[crate::async_trait]
 impl<T: Send + Sync + 'static + Clone> Middleware for WithState<T> {
-    async fn handle<'a>(&'a self, ctx: HyperRequest, next: Next<'a>) -> HyperResponse {
+    async fn handle<'a>(&'a self, ctx: Request, next: Next<'a>) -> Response {
         self.append_extension(ctx, next).await
     }
 }
