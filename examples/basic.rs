@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use lieweb::{http, middleware, App, Error, Request, Response};
+use lieweb::{http, middleware, App, Error, Response, HyperRequest};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
@@ -13,7 +13,7 @@ struct HelloMessage {
 
 type State = Arc<Mutex<u64>>;
 
-async fn request_handler(req: Request) -> Response {
+async fn request_handler(req: HyperRequest) -> Response {
     let value;
 
     let state = req.get_state::<State>().unwrap();
@@ -31,12 +31,12 @@ async fn request_handler(req: Request) -> Response {
     ))
 }
 
-async fn not_found(req: Request) -> Response {
+async fn not_found(req: RequestCtx) -> Response {
     println!("handler not found for {}", req.uri().path());
     Response::with_status(http::StatusCode::NOT_FOUND)
 }
 
-async fn handle_form_urlencoded(mut req: Request) -> Result<Response, Error> {
+async fn handle_form_urlencoded(mut req: RequestCtx) -> Result<Response, Error> {
     let form: serde_json::Value = req.read_form().await?;
 
     println!("form=> {:?}", form);
@@ -81,12 +81,12 @@ async fn main() {
 
     app.post("/form-urlencoded", handle_form_urlencoded);
 
-    app.post("/posts/:id/edit", |req: Request| async move {
+    app.post("/posts/:id/edit", |req: RequestCtx| async move {
         let id: u32 = req.get_param("id").unwrap();
         format!("you are editing post<{}>", id)
     });
 
-    app.get("/readme", |_req: Request| async move {
+    app.get("/readme", |_req: RequestCtx| async move {
         Response::send_file("READMEx.md").await
     });
 

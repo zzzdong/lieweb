@@ -10,6 +10,12 @@ use hyper::http::{
 };
 pub type HyperResponse = http::Response<hyper::Body>;
 
+
+pub trait IntoResponse {
+    fn into_response(self) -> HyperResponse;
+}
+
+
 pub struct Response {
     pub(crate) inner: HyperResponse,
 }

@@ -68,9 +68,9 @@ mod models {
 mod handlers {
     use super::models::*;
     use super::State;
-    use lieweb::{http::StatusCode, Request, Response};
+    use lieweb::{http::StatusCode, RequestCtx, Response};
 
-    pub async fn list_todos(req: Request) -> Result<Response, lieweb::Error> {
+    pub async fn list_todos(req: RequestCtx) -> Result<Response, lieweb::Error> {
         let opts: ListOptions = req.get_query()?;
 
         let state: &State = req.get_state()?;
@@ -87,7 +87,7 @@ mod handlers {
         Ok(Response::with_json(&todos))
     }
 
-    pub async fn create_todo(mut req: Request) -> Result<Response, lieweb::Error> {
+    pub async fn create_todo(mut req: RequestCtx) -> Result<Response, lieweb::Error> {
         let create: Todo = req.read_json().await?;
 
         let state: &State = req.get_state()?;
@@ -106,7 +106,7 @@ mod handlers {
         Ok(Response::with_status(StatusCode::CREATED))
     }
 
-    pub async fn update_todo(mut req: Request) -> Result<Response, lieweb::Error> {
+    pub async fn update_todo(mut req: RequestCtx) -> Result<Response, lieweb::Error> {
         let todo_id: u64 = req.get_param("id")?;
 
         let update: Todo = req.read_json().await?;
@@ -126,7 +126,7 @@ mod handlers {
         Ok(Response::with_status(StatusCode::NOT_FOUND))
     }
 
-    pub async fn delete_todo(req: Request) -> Result<Response, lieweb::Error> {
+    pub async fn delete_todo(req: RequestCtx) -> Result<Response, lieweb::Error> {
         let todo_id: u64 = req.get_param("id")?;
 
         let state: &State = req.get_state()?;

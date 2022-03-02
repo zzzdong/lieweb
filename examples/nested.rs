@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use lieweb::{http, middleware, App, Request, Response, Router};
+use lieweb::{http, middleware, App, RequestCtx, Response, Router};
 use tokio::sync::Mutex;
 
 const DEFAULT_ADDR: &str = "127.0.0.1:5000";
 
 type State = Arc<Mutex<u64>>;
 
-async fn request_handler(req: Request) -> Response {
+async fn request_handler(req: RequestCtx) -> Response {
     let value;
 
     let state: &State = req.get_state().unwrap();
@@ -25,7 +25,7 @@ async fn request_handler(req: Request) -> Response {
     ))
 }
 
-async fn not_found(req: Request) -> Response {
+async fn not_found(req: RequestCtx) -> Response {
     println!("handler not found for {}", req.uri().path());
     http::StatusCode::NOT_FOUND.into()
 }
@@ -68,15 +68,15 @@ async fn main() {
 fn posts_router() -> Router {
     let mut posts = Router::new();
 
-    posts.register(http::Method::GET, "/new", |req: Request| async move {
+    posts.register(http::Method::GET, "/new", |req: RequestCtx| async move {
         format!("on /posts/new, {}", req.path())
     });
 
-    posts.register(http::Method::GET, "/edit", |req: Request| async move {
+    posts.register(http::Method::GET, "/edit", |req: RequestCtx| async move {
         format!("on /posts/edit, {}", req.path())
     });
 
-    posts.register(http::Method::GET, "/delete", |req: Request| async move {
+    posts.register(http::Method::GET, "/delete", |req: RequestCtx| async move {
         format!("on /posts/delete, {}", req.path())
     });
 

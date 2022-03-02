@@ -47,8 +47,12 @@ pub(crate) fn gen_random_string(length: usize) -> String {
 #[macro_export]
 macro_rules! register_method {
     ($func_name: ident, $method: expr) => {
-        pub fn $func_name(&mut self, path: impl AsRef<str>, ep: impl Endpoint) {
-            self.register($method, path, ep)
+        pub fn $func_name<H, T>(&mut self, path: impl AsRef<str>, handler: H)
+        where
+        H: Handler<T> + Send + Sync + 'static,
+        T: 'static,
+        {
+            self.register($method, path, handler)
         }
     };
 }

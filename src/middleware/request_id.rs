@@ -1,6 +1,6 @@
 use crate::{
     middleware::{Middleware, Next},
-    Request, Response,
+    HyperRequest, HyperResponse,
 };
 
 const RANDOM_STRING_LEN: usize = 6;
@@ -9,17 +9,17 @@ const RANDOM_STRING_LEN: usize = 6;
 pub struct RequestId;
 
 impl RequestId {
-    pub fn get(req: &Request) -> Option<&str> {
-        let val = req.get_extension::<RequestIdValue>();
+    pub fn get(req: &HyperRequest) -> Option<&str> {
+        let val = req.extensions().get::<RequestIdValue>();
         val.map(|v| v.value.as_str())
     }
 }
 
 #[crate::async_trait]
 impl Middleware for RequestId {
-    async fn handle<'a>(&'a self, mut ctx: Request, next: Next<'a>) -> Response {
+    async fn handle<'a>(&'a self, mut ctx: HyperRequest, next: Next<'a>) -> HyperResponse {
         let val = RequestIdValue::new(crate::utils::gen_random_string(RANDOM_STRING_LEN));
-        ctx.insert_extension(val);
+        ctx.extensions_mut().insert(val);
 
         next.run(ctx).await
     }

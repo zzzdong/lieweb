@@ -1,4 +1,4 @@
-use lieweb::{App, Request};
+use lieweb::{App, RequestCtx};
 
 #[tokio::main]
 async fn main() {
@@ -8,7 +8,7 @@ async fn main() {
     app.get("/", |_| async { "Hello, world!" });
 
     // GET /hello/lieweb => 200 OK with body "Hello, lieweb!"
-    app.get("/hello/:name", |req: Request| async move {
+    app.get("/hello/:name", |req: RequestCtx| async move {
         let name: String = req.get_param("name").unwrap_or_default();
 
         format!("Hello, {}!", name)

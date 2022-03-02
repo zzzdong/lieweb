@@ -10,7 +10,7 @@ mod tls;
 mod utils;
 
 pub use error::Error;
-pub use request::{HyperRequest, Request};
+pub use request::{HyperRequest};
 pub use response::{HyperResponse, Response};
 pub use router::Router;
 pub use server::{server_id, App};

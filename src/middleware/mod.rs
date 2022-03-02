@@ -13,13 +13,14 @@ use std::future::Future;
 use std::sync::Arc;
 
 use crate::endpoint::DynEndpoint;
-use crate::{Request, Response};
+use crate::request::HyperRequest;
+use crate::{HyperResponse};
 
 /// Middleware that wraps around remaining middleware chain.
 #[crate::async_trait]
 pub trait Middleware: 'static + Send + Sync {
     /// Asynchronously handle the request, and return a response.
-    async fn handle<'a>(&'a self, req: Request, next: Next<'a>) -> Response;
+    async fn handle<'a>(&'a self, req: HyperRequest, next: Next<'a>) -> HyperResponse;
 
     /// Set the middleware's name. By default it uses the type signature.
     fn name(&self) -> &str {
@@ -30,10 +31,10 @@ pub trait Middleware: 'static + Send + Sync {
 #[crate::async_trait]
 impl<F, Fut> Middleware for F
 where
-    F: Fn(Request, Next<'_>) -> Fut + Send + Sync + 'static,
-    Fut: Future<Output = Response> + Send + 'static,
+    F: Fn(HyperRequest, Next<'_>) -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = HyperResponse> + Send + 'static,
 {
-    async fn handle<'a>(&'a self, req: Request, next: Next<'a>) -> Response {
+    async fn handle<'a>(&'a self, req: HyperRequest, next: Next<'a>) -> HyperResponse {
         (self)(req, next).await
     }
 }
@@ -47,7 +48,7 @@ pub struct Next<'a> {
 
 impl<'a> Next<'a> {
     /// Asynchronously execute the remaining middleware chain.
-    pub async fn run(mut self, req: Request) -> Response {
+    pub async fn run(mut self, req: HyperRequest) -> HyperResponse {
         if let Some((current, next)) = self.next_middleware.split_first() {
             self.next_middleware = next;
             current.handle(req, self).await

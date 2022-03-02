@@ -1,6 +1,6 @@
 use crate::{
     middleware::{Middleware, Next},
-    Request, Response,
+    HyperRequest, HyperResponse, request::RequestCtx,
 };
 
 /// A simple requests logger
@@ -12,7 +12,7 @@ impl AccessLog {
         Self::default()
     }
 
-    async fn log_basic<'a>(&'a self, ctx: Request, next: Next<'a>) -> Response {
+    async fn log_basic<'a>(&'a self, ctx: HyperRequest, next: Next<'a>) -> HyperResponse {
         let path = ctx.uri().path().to_owned();
         let method = ctx.method().as_str().to_owned();
         let remote_addr = ctx.remote_addr().map(|a| a.to_string()).unwrap_or_default();
@@ -34,7 +34,7 @@ impl AccessLog {
 
 #[crate::async_trait]
 impl Middleware for AccessLog {
-    async fn handle<'a>(&'a self, ctx: Request, next: Next<'a>) -> Response {
+    async fn handle<'a>(&'a self, ctx: HyperRequest, next: Next<'a>) -> HyperResponse {
         self.log_basic(ctx, next).await
     }
 }

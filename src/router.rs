@@ -4,10 +4,11 @@ use std::sync::Arc;
 use hyper::http;
 use route_recognizer::{Params, Router as PathRouter};
 
-use crate::endpoint::{DynEndpoint, Endpoint, RouterEndpoint};
+use crate::endpoint::{DynEndpoint, Endpoint, Handler, IntoEndpoint, RouterEndpoint};
 use crate::middleware::{Middleware, Next};
-use crate::register_method;
-use crate::{Request, Response};
+use crate::request::RequestCtx;
+use crate::Response;
+use crate::{register_method, HyperRequest, HyperResponse};
 
 type MethodRoute = HashMap<http::Method, Box<DynEndpoint>>;
 
@@ -50,15 +51,55 @@ impl Router {
         }
     }
 
-    pub fn register(&mut self, method: http::Method, path: impl AsRef<str>, ep: impl Endpoint) {
+    // pub fn register(&mut self, method: http::Method, path: impl AsRef<str>, ep: impl Endpoint) {
+    //     let route = self.path_router.at_or_default(path.as_ref());
+    //     match route {
+    //         Route::Method(m) => {
+    //             m.insert(method, Box::new(ep));
+    //         }
+    //         Route::Empty => {
+    //             let mut map: MethodRoute = HashMap::new();
+    //             map.insert(method, Box::new(ep));
+    //             *route = Route::Method(map);
+    //         }
+    //         _ => unreachable!(),
+    //     }
+    // }
+
+    // pub fn register<T>(&mut self, method: http::Method, path: impl AsRef<str>, handler: T)
+    // where
+    //     T: Endpoint,
+    // {
+    //     let route = self.path_router.at_or_default(path.as_ref());
+    //     match route {
+    //         Route::Method(m) => {
+    //             m.insert(method, Box::new(handler));
+    //         }
+    //         Route::Empty => {
+    //             let mut map: MethodRoute = HashMap::new();
+    //             map.insert(method, Box::new(handler));
+    //             *route = Route::Method(map);
+    //         }
+    //         _ => unreachable!(),
+    //     }
+    // }
+
+    pub fn register<H, T>(&mut self, method: http::Method, path: impl AsRef<str>, handler: H)
+    where
+        H: Handler<T> + Send + Sync + 'static,
+        T: 'static,
+    {
         let route = self.path_router.at_or_default(path.as_ref());
+
+        let handler = Box::new(handler.into_endpoint());
+
         match route {
             Route::Method(m) => {
-                m.insert(method, Box::new(ep));
+                m.insert(method, handler);
             }
             Route::Empty => {
                 let mut map: MethodRoute = HashMap::new();
-                map.insert(method, Box::new(ep));
+                map.insert(method, handler);
                 *route = Route::Method(map);
             }
             _ => unreachable!(),
@@ -80,8 +121,12 @@ impl Router {
         self
     }
 
-    pub fn set_not_found_handler(&mut self, ep: impl Endpoint) {
-        self.handle_not_found = Box::new(ep)
+    pub fn set_not_found_handler<H, T>(&mut self, handler: H)
+    where
+        H: Handler<T> + Send + Sync + 'static,
+        T: 'static,
+    {
+        self.handle_not_found = Box::new(handler.into_endpoint());
     }
 
     pub fn merge(
@@ -144,7 +189,7 @@ impl Router {
         }
     }
 
-    pub(crate) async fn route(&self, req: Request) -> Response {
+    pub(crate) async fn route(&self, req: HyperRequest) -> HyperResponse {
         let mut req = req;
 
         let method = req.method().clone();
@@ -182,10 +227,10 @@ impl std::fmt::Debug for Router {
     }
 }
 
-async fn not_found_endpoint(_ctx: Request) -> Response {
-    http::StatusCode::NOT_FOUND.into()
+async fn not_found_endpoint(_ctx: HyperRequest) -> HyperResponse {
+    Response::from(http::StatusCode::NOT_FOUND).into()
 }
 
-async fn method_not_allowed(_ctx: Request) -> Response {
-    http::StatusCode::METHOD_NOT_ALLOWED.into()
+async fn method_not_allowed(_ctx: HyperRequest) -> HyperResponse {
+    Response::from(http::StatusCode::METHOD_NOT_ALLOWED).into()
 }
