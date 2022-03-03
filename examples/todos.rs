@@ -76,7 +76,6 @@ mod handlers {
     pub async fn list_todos(
         state: AppState<State>,
         opts: Query<ListOptions>,
-        req: RequestParts,
     ) -> Result<LieResponse, lieweb::Error> {
         let opts = opts.value();
         let state = state.value().lock().await;
@@ -139,7 +138,6 @@ mod handlers {
     pub async fn delete_todo(
         params: Params,
         state: AppState<State>,
-        req: RequestParts,
     ) -> Result<LieResponse, lieweb::Error> {
         let todo_id: u64 = params.get("id")?;
 

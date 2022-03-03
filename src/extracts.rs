@@ -1,4 +1,4 @@
-use std::{convert::Infallible, net::SocketAddr, str::FromStr, string::ParseError};
+use std::{convert::Infallible, net::SocketAddr};
 
 use hyper::StatusCode;
 use serde::de::DeserializeOwned;
@@ -8,7 +8,7 @@ use crate::{
     middleware::WithState,
     request::{FromRequest, RequestCtx, RequestParts},
     response::IntoResponse,
-    LieResponse, Request, Response,
+    LieResponse, Response,
 };
 
 pub struct Params {

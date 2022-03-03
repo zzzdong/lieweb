@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::request::{FromRequest, RequestParts};
 use crate::response::IntoResponse;
 use crate::router::Router;
-use crate::{Error, Request, Response};
+use crate::{Request, Response};
 
 pub(crate) type DynEndpoint = dyn Endpoint;
 
@@ -72,7 +72,7 @@ where
     Fut: Future<Output = Res> + Send + 'static,
     Res: IntoResponse + Send + 'static,
 {
-    async fn call(self, req: Request) -> Response {
+    async fn call(self, _req: Request) -> Response {
         self().await.into_response()
     }
 }

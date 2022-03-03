@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use lieweb::{
-    http, middleware, request::RequestParts, App, AppState, Error, LieResponse, Params, RemoteAddr,
+    http, middleware, request::RequestParts, App, AppState, LieResponse, Params, RemoteAddr,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;

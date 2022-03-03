@@ -1,23 +1,16 @@
 use std::net::SocketAddr;
 
 use bytes::{Buf, Bytes, BytesMut};
-use headers::{Header, HeaderMapExt};
 use hyper::body::HttpBody;
+use hyper::http::header::{HeaderMap, HeaderValue};
 use hyper::http::request::Parts;
 use hyper::http::Extensions;
-use hyper::http::{
-    self,
-    header::{HeaderMap, HeaderName, HeaderValue},
-};
 use hyper::{Method, Uri, Version};
 use route_recognizer::Params;
 use serde::de::DeserializeOwned;
 
 pub type Request = hyper::Request<hyper::Body>;
 
-use crate::error::{
-    invalid_header, invalid_param, missing_appstate, missing_cookie, missing_header, missing_param,
-};
 use crate::response::IntoResponse;
 use crate::Error;
 
@@ -178,7 +171,7 @@ impl RequestCtx {
         let ctx = req
             .extensions()
             .get::<Self>()
-            .expect("can not get ReqCtx from req.extensions()");
+            .expect("can not get RequestCtx from req.extensions()");
 
         match ctx.route_path {
             Some(ref path) => path,
@@ -190,7 +183,7 @@ impl RequestCtx {
         let ctx = req
             .extensions_mut()
             .get_mut::<Self>()
-            .expect("can not get ReqCtx from req.extensions()");
+            .expect("can not get RequestCtx from req.extensions()");
         ctx.route_path = Some(path.to_string());
     }
 
@@ -198,7 +191,7 @@ impl RequestCtx {
         let ctx = req
             .extensions_mut()
             .get_mut::<Self>()
-            .expect("can not get ReqCtx from req.extensions()");
+            .expect("can not get RequestCtx from req.extensions()");
 
         for (k, v) in other {
             ctx.params.insert(k.to_string(), v.to_string());

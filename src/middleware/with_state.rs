@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::{
     middleware::{Middleware, Next},
     request::RequestParts,

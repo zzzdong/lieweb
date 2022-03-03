@@ -200,14 +200,14 @@ pub fn server_id() -> &'static str {
 mod test {
     use crate::{App, Request, Router};
 
-    // fn app() -> App {
-    //     let mut app = App::new();
+    fn app() -> App {
+        let mut app = App::new();
 
-    //     app.get("/", |_req| async move { "/" });
-    //     app.post("/post", |_req| async move { "/post" });
+        app.get("/", || async move { "/" });
+        app.post("/post", || async move { "/post" });
 
-    //     app
-    // }
+        app
+    }
 
     fn request(method: &str, uri: &str) -> Request {
         hyper::Request::builder()
