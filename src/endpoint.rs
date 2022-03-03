@@ -1,4 +1,3 @@
-
 use std::future::Future;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -6,7 +5,7 @@ use std::sync::Arc;
 use crate::request::{FromRequest, RequestParts};
 use crate::response::IntoResponse;
 use crate::router::Router;
-use crate::{Request, Response, Error};
+use crate::{Error, Request, Response};
 
 pub(crate) type DynEndpoint = dyn Endpoint;
 
@@ -45,9 +44,9 @@ impl<H, T> IntoEndpoint<H, T> {
 
 #[crate::async_trait]
 impl<H, T> Endpoint for IntoEndpoint<H, T>
-    where
-        H: Handler<T> + Clone + Send + Sync + 'static,
-        T: 'static
+where
+    H: Handler<T> + Clone + Send + Sync + 'static,
+    T: 'static,
 {
     async fn call(&self, req: Request) -> Response {
         let handler = self.handler.clone();
@@ -57,14 +56,11 @@ impl<H, T> Endpoint for IntoEndpoint<H, T>
     }
 }
 
-
-
-
 #[crate::async_trait]
-pub trait Handler<T>: Clone + Send + Sized + 'static {
+pub trait Handler<Args>: Clone + Send + Sized + 'static {
     async fn call(self, req: Request) -> Response;
 
-    fn into_endpoint(self) -> IntoEndpoint<Self, T> {
+    fn into_endpoint(self) -> IntoEndpoint<Self, Args> {
         IntoEndpoint::new(self)
     }
 }
@@ -72,14 +68,33 @@ pub trait Handler<T>: Clone + Send + Sized + 'static {
 #[crate::async_trait]
 impl<F, Fut, Res> Handler<()> for F
 where
-    F: FnOnce() -> Fut + Clone + Send + 'static,
-    Fut: Future<Output = Res> + Send,
+    F: Fn() -> Fut + Clone + Send + Sync + 'static,
+    Fut: Future<Output = Res> + Send + 'static,
     Res: IntoResponse + Send + 'static,
 {
     async fn call(self, req: Request) -> Response {
         self().await.into_response()
     }
 }
+
+// #[crate::async_trait]
+// impl<F, Fut, Res, T> Handler<(T)> for F
+// where
+//     F: Fn(T) -> Fut + Clone + Send + Sync + 'static,
+//     Fut: Future<Output = Res> + Send + 'static,
+//     Res: IntoResponse + Send + 'static,
+//     T: FromRequest + Send + 'static,
+// {
+//     async fn call(self, req: Request) -> Response {
+//         let mut req = RequestParts::new(req);
+//         let arg1 = match T::from_request(&mut req).await {
+//             Ok(value) => value,
+//             Err(rejection) => return rejection.into_response(),
+//         };
+
+//         self(arg1).await.into_response()
+//     }
+// }
 
 macro_rules! impl_handler {
     ($($ty: ident),+) => {

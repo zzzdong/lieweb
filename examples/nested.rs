@@ -1,16 +1,18 @@
 use std::sync::Arc;
 
-use lieweb::{http, middleware, App, RequestCtx, Response, Router};
+use lieweb::{
+    http, middleware, request::RequestParts, App, AppState, LieResponse, RemoteAddr, Router,
+};
 use tokio::sync::Mutex;
 
 const DEFAULT_ADDR: &str = "127.0.0.1:5000";
 
 type State = Arc<Mutex<u64>>;
 
-async fn request_handler(req: RequestCtx) -> Response {
+async fn request_handler(addr: RemoteAddr, req: AppState<State>) -> LieResponse {
     let value;
 
-    let state: &State = req.get_state().unwrap();
+    let state: &State = req.value();
 
     {
         let mut counter = state.lock().await;
@@ -18,14 +20,10 @@ async fn request_handler(req: RequestCtx) -> Response {
         *counter += 1;
     }
 
-    Response::with_html(format!(
-        "got request#{} from {:?}",
-        value,
-        req.remote_addr()
-    ))
+    LieResponse::with_html(format!("got request#{} from {:?}", value, addr.value(),))
 }
 
-async fn not_found(req: RequestCtx) -> Response {
+async fn not_found(req: RequestParts) -> LieResponse {
     println!("handler not found for {}", req.uri().path());
     http::StatusCode::NOT_FOUND.into()
 }
@@ -54,7 +52,7 @@ async fn main() {
 
     app.register(http::Method::GET, "/", request_handler);
 
-    app.register(http::Method::GET, "/a", |_req| async move { "/a" });
+    app.register(http::Method::GET, "/a", || async move { "/a" });
 
     app.merge("/posts/:id/", posts_router()).unwrap();
 
@@ -68,20 +66,22 @@ async fn main() {
 fn posts_router() -> Router {
     let mut posts = Router::new();
 
-    posts.register(http::Method::GET, "/new", |req: RequestCtx| async move {
+    posts.register(http::Method::GET, "/new", |req: RequestParts| async move {
         format!("on /posts/new, {}", req.path())
     });
 
-    posts.register(http::Method::GET, "/edit", |req: RequestCtx| async move {
+    posts.register(http::Method::GET, "/edit", |req: RequestParts| async move {
         format!("on /posts/edit, {}", req.path())
     });
 
-    posts.register(http::Method::GET, "/delete", |req: RequestCtx| async move {
-        format!("on /posts/delete, {}", req.path())
-    });
+    posts.register(
+        http::Method::GET,
+        "/delete",
+        |req: RequestParts| async move { format!("on /posts/delete, {}", req.path()) },
+    );
 
-    posts.set_not_found_handler(|_req| async move {
-        Response::with_html("posts handler Not Found").set_status(http::StatusCode::NOT_FOUND)
+    posts.set_not_found_handler(|| async move {
+        LieResponse::with_html("posts handler Not Found").set_status(http::StatusCode::NOT_FOUND)
     });
 
     posts

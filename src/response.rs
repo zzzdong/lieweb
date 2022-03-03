@@ -1,5 +1,5 @@
-use std::borrow::Cow;
 use std::convert::TryFrom;
+use std::{borrow::Cow, convert::Infallible};
 
 use bytes::Bytes;
 use futures::Stream;
@@ -9,14 +9,23 @@ use hyper::http::{
     StatusCode,
 };
 
-
 pub type Response = http::Response<hyper::Body>;
-
 
 pub trait IntoResponse {
     fn into_response(self) -> Response;
 }
 
+impl IntoResponse for Response {
+    fn into_response(self) -> Response {
+        self
+    }
+}
+
+impl IntoResponse for Infallible {
+    fn into_response(self) -> Response {
+        LieResponse::new().into()
+    }
+}
 
 pub struct LieResponse {
     pub(crate) inner: Response,
@@ -24,7 +33,7 @@ pub struct LieResponse {
 
 impl LieResponse {
     pub fn new() -> Self {
-        LieResponse::default().into()
+        Response::default().into()
     }
 
     pub fn with_status(status: StatusCode) -> Self {
@@ -78,8 +87,10 @@ impl LieResponse {
                 let s =
                     tokio_util::codec::FramedRead::new(file, tokio_util::codec::BytesCodec::new());
 
-                let resp =
-                    LieResponse::with_stream(s, mime_guess::from_path(path).first_or_octet_stream());
+                let resp = LieResponse::with_stream(
+                    s,
+                    mime_guess::from_path(path).first_or_octet_stream(),
+                );
 
                 Ok(resp)
             }
@@ -197,14 +208,32 @@ impl From<Response> for LieResponse {
 
 impl From<LieResponse> for Response {
     fn from(resp: LieResponse) -> Self {
-        let LieResponse { inner } = resp;
-        inner
+        resp.inner
+    }
+}
+
+impl IntoResponse for LieResponse {
+    fn into_response(self) -> Response {
+        self.inner
     }
 }
 
 impl From<StatusCode> for LieResponse {
     fn from(val: StatusCode) -> Self {
         Self::with_status(val)
+    }
+}
+
+impl IntoResponse for StatusCode {
+    fn into_response(self) -> Response {
+        http::Response::builder()
+            .status(self.clone())
+            .header(
+                hyper::header::CONTENT_TYPE,
+                mime::TEXT_PLAIN_UTF_8.to_string(),
+            )
+            .body(hyper::Body::from(format!("{}", self)))
+            .unwrap()
     }
 }
 
@@ -221,6 +250,18 @@ impl From<&'static [u8]> for LieResponse {
     }
 }
 
+impl IntoResponse for &'static [u8] {
+    fn into_response(self) -> Response {
+        http::Response::builder()
+            .header(
+                hyper::header::CONTENT_TYPE,
+                mime::APPLICATION_OCTET_STREAM.to_string(),
+            )
+            .body(hyper::Body::from(self))
+            .unwrap()
+    }
+}
+
 impl From<Vec<u8>> for LieResponse {
     fn from(val: Vec<u8>) -> Self {
         http::Response::builder()
@@ -231,6 +272,18 @@ impl From<Vec<u8>> for LieResponse {
             .body(hyper::Body::from(val))
             .unwrap()
             .into()
+    }
+}
+
+impl IntoResponse for Vec<u8> {
+    fn into_response(self) -> Response {
+        http::Response::builder()
+            .header(
+                hyper::header::CONTENT_TYPE,
+                mime::APPLICATION_OCTET_STREAM.to_string(),
+            )
+            .body(hyper::Body::from(self))
+            .unwrap()
     }
 }
 
@@ -247,6 +300,18 @@ impl From<&'static str> for LieResponse {
     }
 }
 
+impl IntoResponse for &'static str {
+    fn into_response(self) -> Response {
+        http::Response::builder()
+            .header(
+                hyper::header::CONTENT_TYPE,
+                mime::TEXT_PLAIN_UTF_8.to_string(),
+            )
+            .body(hyper::Body::from(self))
+            .unwrap()
+    }
+}
+
 impl From<String> for LieResponse {
     fn from(val: String) -> Self {
         http::Response::builder()
@@ -260,11 +325,32 @@ impl From<String> for LieResponse {
     }
 }
 
+impl IntoResponse for String {
+    fn into_response(self) -> Response {
+        http::Response::builder()
+            .header(
+                hyper::header::CONTENT_TYPE,
+                mime::TEXT_PLAIN_UTF_8.to_string(),
+            )
+            .body(hyper::Body::from(self))
+            .unwrap()
+    }
+}
+
 impl From<Cow<'static, str>> for LieResponse {
     fn from(val: Cow<'static, str>) -> Self {
         match val {
             Cow::Borrowed(s) => s.into(),
             Cow::Owned(s) => s.into(),
+        }
+    }
+}
+
+impl IntoResponse for Cow<'static, str> {
+    fn into_response(self) -> Response {
+        match self {
+            Cow::Borrowed(s) => s.into_response(),
+            Cow::Owned(s) => s.into_response(),
         }
     }
 }
@@ -277,6 +363,27 @@ where
     fn from(val: Result<R, E>) -> Self {
         match val {
             Ok(r) => r.into(),
+            Err(e) => {
+                tracing::error!("on Result<R, E>, error: {:?}", e);
+
+                http::Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(hyper::Body::from("Internal Server Error"))
+                    .unwrap()
+                    .into()
+            }
+        }
+    }
+}
+
+impl<E, R> IntoResponse for Result<R, E>
+where
+    R: Into<LieResponse>,
+    E: std::error::Error + 'static + Send + Sync,
+{
+    fn into_response(self) -> Response {
+        match self {
+            Ok(r) => r.into().into_response(),
             Err(e) => {
                 tracing::error!("on Result<R, E>, error: {:?}", e);
 

@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use lieweb::{http, middleware, App, Error, Response, Request};
+use lieweb::{
+    http, middleware, request::RequestParts, App, AppState, Error, LieResponse, Params, RemoteAddr,
+};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
@@ -13,10 +15,10 @@ struct HelloMessage {
 
 type State = Arc<Mutex<u64>>;
 
-async fn request_handler(req: Request) -> Response {
+async fn request_handler(addr: RemoteAddr, req: AppState<State>) -> LieResponse {
     let value;
 
-    let state = req.get_state::<State>().unwrap();
+    let state = req.value();
 
     {
         let mut counter = state.lock().await;
@@ -24,25 +26,21 @@ async fn request_handler(req: Request) -> Response {
         *counter += 1;
     }
 
-    Response::with_html(format!(
-        "got request#{} from {:?}",
-        value,
-        req.remote_addr()
-    ))
+    LieResponse::with_html(format!("got request#{} from {:?}", value, addr.value()))
 }
 
-async fn not_found(req: RequestCtx) -> Response {
+async fn not_found(req: RequestParts) -> LieResponse {
     println!("handler not found for {}", req.uri().path());
-    Response::with_status(http::StatusCode::NOT_FOUND)
+    LieResponse::with_status(http::StatusCode::NOT_FOUND)
 }
 
-async fn handle_form_urlencoded(mut req: RequestCtx) -> Result<Response, Error> {
-    let form: serde_json::Value = req.read_form().await?;
+// async fn handle_form_urlencoded(mut req: RequestCtx) -> Result<LieResponse, Error> {
+//     let form: serde_json::Value = req.read_form().await?;
 
-    println!("form=> {:?}", form);
+//     println!("form=> {:?}", form);
 
-    Ok(Response::with_json(&form))
-}
+//     Ok(LieResponse::with_json(&form))
+// }
 
 #[tokio::main]
 async fn main() {
@@ -70,24 +68,24 @@ async fn main() {
 
     app.register(http::Method::GET, "/", request_handler);
 
-    app.get("/hello", |_req| async move { "hello, world!" });
+    app.get("/hello", || async move { "hello, world!" });
 
-    app.get("/json", |_req| async move {
+    app.get("/json", || async move {
         let msg = HelloMessage {
             message: "hello, world!".to_owned(),
         };
-        Response::with_json(&msg)
+        LieResponse::with_json(&msg)
     });
 
-    app.post("/form-urlencoded", handle_form_urlencoded);
+    // app.post("/form-urlencoded", handle_form_urlencoded);
 
-    app.post("/posts/:id/edit", |req: RequestCtx| async move {
-        let id: u32 = req.get_param("id").unwrap();
+    app.post("/posts/:id/edit", |req: Params| async move {
+        let id: u32 = req.get("id").unwrap();
         format!("you are editing post<{}>", id)
     });
 
-    app.get("/readme", |_req: RequestCtx| async move {
-        Response::send_file("READMEx.md").await
+    app.get("/readme", || async move {
+        LieResponse::send_file("READMEx.md").await
     });
 
     app.handle_not_found(not_found);

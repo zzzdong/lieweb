@@ -68,13 +68,18 @@ mod models {
 mod handlers {
     use super::models::*;
     use super::State;
-    use lieweb::{http::StatusCode, RequestCtx, Response};
+    use lieweb::AppState;
+    use lieweb::Params;
+    use lieweb::Query;
+    use lieweb::{http::StatusCode, request::RequestParts, LieResponse};
 
-    pub async fn list_todos(req: RequestCtx) -> Result<Response, lieweb::Error> {
-        let opts: ListOptions = req.get_query()?;
-
-        let state: &State = req.get_state()?;
-        let state = state.lock().await;
+    pub async fn list_todos(
+        state: AppState<State>,
+        opts: Query<ListOptions>,
+        req: RequestParts,
+    ) -> Result<LieResponse, lieweb::Error> {
+        let opts = opts.value();
+        let state = state.value().lock().await;
 
         let todos: Vec<Todo> = state
             .db
@@ -84,62 +89,70 @@ mod handlers {
             .take(opts.limit.unwrap_or(std::usize::MAX))
             .collect();
 
-        Ok(Response::with_json(&todos))
+        Ok(LieResponse::with_json(&todos))
     }
 
-    pub async fn create_todo(mut req: RequestCtx) -> Result<Response, lieweb::Error> {
+    pub async fn create_todo(
+        state: AppState<State>,
+        mut req: RequestParts,
+    ) -> Result<LieResponse, lieweb::Error> {
         let create: Todo = req.read_json().await?;
 
-        let state: &State = req.get_state()?;
-        let mut state = state.lock().await;
+        let mut state = state.value().lock().await;
 
         for todo in state.db.iter() {
             if todo.id == create.id {
                 tracing::debug!("    -> id already exists: {}", create.id);
                 // Todo with id already exists, return `400 BadRequest`.
-                return Ok(Response::with_status(StatusCode::BAD_REQUEST));
+                return Ok(LieResponse::with_status(StatusCode::BAD_REQUEST));
             }
         }
 
         state.db.push(create);
 
-        Ok(Response::with_status(StatusCode::CREATED))
+        Ok(LieResponse::with_status(StatusCode::CREATED))
     }
 
-    pub async fn update_todo(mut req: RequestCtx) -> Result<Response, lieweb::Error> {
-        let todo_id: u64 = req.get_param("id")?;
+    pub async fn update_todo(
+        params: Params,
+        state: AppState<State>,
+        mut req: RequestParts,
+    ) -> Result<LieResponse, lieweb::Error> {
+        let todo_id: u64 = params.get("id")?;
 
         let update: Todo = req.read_json().await?;
 
-        let state: &State = req.get_state()?;
-        let mut state = state.lock().await;
+        let mut state = state.value().lock().await;
 
         for todo in state.db.iter_mut() {
             if todo.id == todo_id {
                 *todo = update;
-                return Ok(Response::with_status(StatusCode::OK));
+                return Ok(LieResponse::with_status(StatusCode::OK));
             }
         }
 
         tracing::debug!("-> todo id not found!");
 
-        Ok(Response::with_status(StatusCode::NOT_FOUND))
+        Ok(LieResponse::with_status(StatusCode::NOT_FOUND))
     }
 
-    pub async fn delete_todo(req: RequestCtx) -> Result<Response, lieweb::Error> {
-        let todo_id: u64 = req.get_param("id")?;
+    pub async fn delete_todo(
+        params: Params,
+        state: AppState<State>,
+        req: RequestParts,
+    ) -> Result<LieResponse, lieweb::Error> {
+        let todo_id: u64 = params.get("id")?;
 
-        let state: &State = req.get_state()?;
-        let mut state = state.lock().await;
+        let mut state = state.value().lock().await;
 
         let len = state.db.len();
         state.db.retain(|todo| todo.id != todo_id);
 
         if len != state.db.len() {
-            Ok(Response::with_status(StatusCode::NO_CONTENT))
+            Ok(LieResponse::with_status(StatusCode::NO_CONTENT))
         } else {
             tracing::debug!("    -> todo id not found!");
-            Ok(Response::with_status(StatusCode::NOT_FOUND))
+            Ok(LieResponse::with_status(StatusCode::NOT_FOUND))
         }
     }
 }

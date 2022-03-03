@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use crate::endpoint::DynEndpoint;
 use crate::request::Request;
-use crate::{Response};
+use crate::Response;
 
 /// Middleware that wraps around remaining middleware chain.
 #[crate::async_trait]

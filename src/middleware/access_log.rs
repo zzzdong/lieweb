@@ -1,6 +1,7 @@
 use crate::{
     middleware::{Middleware, Next},
-    Request, Response, request::RequestCtx,
+    request::RequestCtx,
+    Request, Response,
 };
 
 /// A simple requests logger
@@ -15,7 +16,9 @@ impl AccessLog {
     async fn log_basic<'a>(&'a self, ctx: Request, next: Next<'a>) -> Response {
         let path = ctx.uri().path().to_owned();
         let method = ctx.method().as_str().to_owned();
-        let remote_addr = ctx.remote_addr().map(|a| a.to_string()).unwrap_or_default();
+        let remote_addr = RequestCtx::get_remote_addr(&ctx)
+            .map(|a| a.to_string())
+            .unwrap_or_default();
 
         let start = std::time::Instant::now();
         let res = next.run(ctx).await;

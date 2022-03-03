@@ -2,19 +2,20 @@ use std::sync::Arc;
 
 use crate::{
     middleware::{Middleware, Next},
+    request::RequestParts,
     Request, Response,
 };
 
 #[derive(Debug, Clone)]
-pub struct WithState<T: Send + Sync + 'static> {
+pub struct WithState<T: Clone + Send + Sync + 'static> {
     extension: AppState<T>,
 }
 
-impl<T: Send + Sync + 'static> WithState<T> {
+impl<T: Clone + Send + Sync + 'static> WithState<T> {
     pub fn new(extension: T) -> Self {
         WithState {
             extension: AppState {
-                inner: Arc::new(extension),
+                inner: extension.clone(),
             },
         }
     }
@@ -24,8 +25,8 @@ impl<T: Send + Sync + 'static> WithState<T> {
         next.run(ctx).await
     }
 
-    pub(crate) fn get_state(ctx: &Request) -> Option<&T> {
-        ctx.extensions().get::<AppState<T>>().map(|o| o.inner.as_ref())
+    pub(crate) fn get_state(ctx: &RequestParts) -> Option<T> {
+        ctx.extensions.get::<AppState<T>>().map(|o| o.inner.clone())
     }
 }
 
@@ -36,18 +37,7 @@ impl<T: Send + Sync + 'static + Clone> Middleware for WithState<T> {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct AppState<T: Send + Sync + 'static> {
-    pub(crate) inner: Arc<T>,
-}
-
-impl<T> Clone for AppState<T>
-where
-    T: Send + Sync + 'static,
-{
-    fn clone(&self) -> Self {
-        AppState {
-            inner: self.inner.clone(),
-        }
-    }
+#[derive(Debug, Clone)]
+pub(crate) struct AppState<T: Clone + Send + Sync + 'static> {
+    pub(crate) inner: T,
 }

@@ -6,10 +6,10 @@ use route_recognizer::{Params, Router as PathRouter};
 
 use crate::endpoint::{DynEndpoint, Handler, RouterEndpoint};
 use crate::middleware::{Middleware, Next};
-use crate::request::{Request, RequestCtx};
-use crate::Response;
-use crate::response::LieResponse;
 use crate::register_method;
+use crate::request::{Request, RequestCtx};
+use crate::response::LieResponse;
+use crate::Response;
 
 type MethodRoute = HashMap<http::Method, Box<DynEndpoint>>;
 
@@ -195,12 +195,12 @@ impl Router {
 
         let method = req.method().clone();
 
-        let path = req.route_path();
+        let path = RequestCtx::route_path(&mut req);
         let Selection { endpoint, params } = self.find(path, method);
 
-        req.merge_params(&params);
+        RequestCtx::merge_params(&mut req, &params);
         if let Some(rest) = params.find(LIEWEB_NESTED_ROUTER) {
-            req.set_route_path(rest);
+            RequestCtx::set_route_path(&mut req, rest);
         }
 
         let next = Next {

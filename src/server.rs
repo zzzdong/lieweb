@@ -9,12 +9,13 @@ use lazy_static::lazy_static;
 use tokio::net::{TcpListener, ToSocketAddrs};
 
 use crate::endpoint::Handler;
+use crate::endpoint::{Endpoint, RouterEndpoint};
 use crate::error::Error;
 use crate::middleware::{Middleware, WithState};
-use crate::{register_method, Response};
-use crate::request::{Request, ReqCtx};
+use crate::register_method;
+use crate::request::{Request, RequestCtx};
+use crate::response::Response;
 use crate::router::Router;
-use crate::endpoint::{Endpoint, RouterEndpoint};
 
 lazy_static! {
     pub static ref SERVER_ID: String = format!("Lieweb {}", env!("CARGO_PKG_VERSION"));
@@ -72,10 +73,10 @@ impl App {
         self
     }
 
-    pub fn handle_not_found<H, T>(&mut self, handler: H) -> &mut Self 
-        where
-            H: Handler<T> + Send + Sync + 'static,
-            T: 'static,
+    pub fn handle_not_found<H, T>(&mut self, handler: H) -> &mut Self
+    where
+        H: Handler<T> + Send + Sync + 'static,
+        T: 'static,
     {
         self.router.set_not_found_handler(handler);
         self
@@ -110,7 +111,7 @@ impl App {
                     socket,
                     service_fn(|mut req| {
                         let router = router.clone();
-                        ReqCtx::init(&mut req, Some(remote_addr));
+                        RequestCtx::init(&mut req, Some(remote_addr));
 
                         async move {
                             let endpoint = RouterEndpoint::new(router);
@@ -160,7 +161,7 @@ impl App {
                             stream,
                             service_fn(|req| {
                                 let router = router.clone();
-                                let req = ReqCtx::new(req, Some(remote_addr));
+                                let req = RequestCtx::new(req, Some(remote_addr));
 
                                 async move {
                                     let endpoint = RouterEndpoint::new(router);

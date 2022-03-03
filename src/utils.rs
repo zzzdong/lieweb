@@ -49,8 +49,8 @@ macro_rules! register_method {
     ($func_name: ident, $method: expr) => {
         pub fn $func_name<H, T>(&mut self, path: impl AsRef<str>, handler: H)
         where
-        H: Handler<T> + Send + Sync + 'static,
-        T: 'static,
+            H: Handler<T> + Send + Sync + 'static,
+            T: 'static,
         {
             self.register($method, path, handler)
         }
