@@ -1,4 +1,8 @@
-use std::{convert::Infallible, net::SocketAddr};
+use std::{
+    convert::Infallible,
+    net::SocketAddr,
+    ops::{Deref, DerefMut},
+};
 
 use hyper::StatusCode;
 use serde::de::DeserializeOwned;
@@ -12,12 +16,12 @@ use crate::{
 };
 
 pub struct Params {
-    inner: route_recognizer::Params,
+    value: route_recognizer::Params,
 }
 
 impl Params {
-    pub(crate) fn new(inner: route_recognizer::Params) -> Self {
-        Params { inner }
+    pub(crate) fn new(value: route_recognizer::Params) -> Self {
+        Params { value }
     }
 
     pub fn get<T>(&self, param: &str) -> Result<T, crate::Error>
@@ -25,7 +29,7 @@ impl Params {
         T: std::str::FromStr,
         <T as std::str::FromStr>::Err: std::error::Error,
     {
-        match self.inner.find(param) {
+        match self.value.find(param) {
             Some(param) => param
                 .parse()
                 .map_err(|e| invalid_param(param, std::any::type_name::<T>(), e)),
@@ -46,16 +50,30 @@ impl FromRequest for Params {
 }
 
 pub struct AppState<T> {
-    inner: T,
+    value: T,
 }
 
 impl<T> AppState<T> {
-    pub(crate) fn new(inner: T) -> Self {
-        AppState { inner }
+    pub fn value(&self) -> &T {
+        &self.value
     }
 
-    pub fn value(&self) -> &T {
-        &self.inner
+    pub fn take(self) -> T {
+        self.value
+    }
+}
+
+impl<T> Deref for AppState<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl<T> DerefMut for AppState<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
     }
 }
 
@@ -69,7 +87,7 @@ where
     async fn from_request(req: &mut RequestParts) -> Result<Self, Self::Rejection> {
         WithState::get_state(req)
             .ok_or(StateRejection)
-            .map(|inner: T| AppState { inner })
+            .map(|value: T| AppState { value })
     }
 }
 
@@ -115,12 +133,16 @@ impl FromRequest for RequestParts {
 
 #[derive(Default)]
 pub struct Query<T: Default> {
-    inner: T,
+    value: T,
 }
 
 impl<T: Default> Query<T> {
     pub fn value(&self) -> &T {
-        &self.inner
+        &self.value
+    }
+
+    pub fn take(self) -> T {
+        self.value
     }
 }
 
@@ -134,7 +156,7 @@ where
     async fn from_request(req: &mut RequestParts) -> Result<Self, Self::Rejection> {
         match req.uri().query() {
             Some(query) => serde_urlencoded::from_str::<T>(query)
-                .map(|inner| Query { inner })
+                .map(|value| Query { value })
                 .map_err(QueryRejection::from),
             None => Ok(Default::default()),
         }
