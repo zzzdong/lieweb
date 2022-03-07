@@ -11,7 +11,7 @@ mod tls;
 mod utils;
 
 pub use error::Error;
-pub use extracts::{AppState, Params, Query, RemoteAddr};
+pub use extracts::{AppState, PathParam, Query, RemoteAddr};
 pub use request::Request;
 pub use response::{LieResponse, Response};
 pub use router::Router;

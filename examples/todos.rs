@@ -68,10 +68,16 @@ mod models {
 mod handlers {
     use super::models::*;
     use super::State;
+    use lieweb::request::LieRequest;
     use lieweb::AppState;
-    use lieweb::Params;
+    use lieweb::PathParam;
     use lieweb::Query;
     use lieweb::{http::StatusCode, request::RequestParts, LieResponse};
+
+    #[derive(Debug, serde::Deserialize)]
+    pub struct TodoId {
+        pub id: u64,
+    }
 
     pub async fn list_todos(
         state: AppState<State>,
@@ -113,11 +119,11 @@ mod handlers {
     }
 
     pub async fn update_todo(
-        params: Params,
+        params: PathParam<TodoId>,
         state: AppState<State>,
         mut req: RequestParts,
     ) -> Result<LieResponse, lieweb::Error> {
-        let todo_id: u64 = params.get("id")?;
+        let todo_id: u64 = params.value().id;
 
         let update: Todo = req.read_json().await?;
 
@@ -136,10 +142,10 @@ mod handlers {
     }
 
     pub async fn delete_todo(
-        params: Params,
+        params: PathParam<TodoId>,
         state: AppState<State>,
     ) -> Result<LieResponse, lieweb::Error> {
-        let todo_id: u64 = params.get("id")?;
+        let todo_id: u64 = params.value().id;
 
         let mut state = state.value().lock().await;
 
@@ -149,7 +155,7 @@ mod handlers {
         if len != state.db.len() {
             Ok(LieResponse::with_status(StatusCode::NO_CONTENT))
         } else {
-            tracing::debug!("    -> todo id not found!");
+            tracing::debug!("-> todo id not found!");
             Ok(LieResponse::with_status(StatusCode::NOT_FOUND))
         }
     }

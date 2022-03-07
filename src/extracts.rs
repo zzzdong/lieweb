@@ -8,7 +8,6 @@ use hyper::StatusCode;
 use serde::{de::DeserializeOwned, Deserialize};
 
 use crate::{
-    error::{invalid_param, missing_param},
     middleware::WithState,
     request::{FromRequest, RequestCtx, RequestParts},
     response::IntoResponse,
@@ -23,17 +22,17 @@ impl IntoResponse for ParamsRejection {
     }
 }
 
-pub struct Params<T> {
+pub struct PathParam<T> {
     value: T,
 }
 
-impl<T> Params<T>
+impl<T> PathParam<T>
 where
     T: DeserializeOwned,
 {
     pub(crate) fn from_params(params: &route_recognizer::Params) -> Result<Self, ParamsRejection> {
         params_de::from_params::<T>(params)
-            .map(|value| Params { value })
+            .map(|value| PathParam { value })
             .map_err(|e| ParamsRejection(e))
     }
 
@@ -47,16 +46,17 @@ where
 }
 
 #[crate::async_trait]
-impl<T> FromRequest for Params<T>
+impl<T> FromRequest for PathParam<T>
 where
-    T: DeserializeOwned + Default,
+    T: DeserializeOwned,
 {
     type Rejection = ParamsRejection;
 
     async fn from_request(req: &mut RequestParts) -> Result<Self, Self::Rejection> {
-        let params = RequestCtx::params(req).expect("params not found");
+        let empty = route_recognizer::Params::new();
+        let params = RequestCtx::params(req).unwrap_or(&empty);
 
-        Params::from_params(params)
+        PathParam::from_params(params)
     }
 }
 
@@ -138,7 +138,9 @@ impl FromRequest for RequestParts {
     type Rejection = Infallible;
 
     async fn from_request(req: &mut RequestParts) -> Result<Self, Self::Rejection> {
-        Ok(RequestParts::from_other(req))
+        let empty = hyper::Request::default();
+        let req = std::mem::replace(req, empty);
+        Ok(req)
     }
 }
 
@@ -191,7 +193,6 @@ impl IntoResponse for QueryRejection {
 mod params_de {
     use std::fmt::{self, Display};
 
-    use super::Params;
     use serde::{
         de::{self, DeserializeOwned, IntoDeserializer, MapAccess},
         Deserializer,
@@ -417,7 +418,7 @@ mod params_de {
     #[cfg(test)]
     mod test {
         use super::from_params;
-        use crate::Params;
+        use crate::PathParam;
 
         #[test]
         fn test() {

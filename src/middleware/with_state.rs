@@ -24,7 +24,9 @@ impl<T: Clone + Send + Sync + 'static> WithState<T> {
     }
 
     pub(crate) fn get_state(ctx: &RequestParts) -> Option<T> {
-        ctx.extensions.get::<AppState<T>>().map(|o| o.inner.clone())
+        ctx.extensions()
+            .get::<AppState<T>>()
+            .map(|o| o.inner.clone())
     }
 }
 

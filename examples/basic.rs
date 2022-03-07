@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use lieweb::{
-    http, middleware, request::RequestParts, App, AppState, LieResponse, Params, RemoteAddr,
+    http, middleware, request::RequestParts, App, AppState, LieResponse, PathParam, RemoteAddr,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
@@ -84,7 +84,7 @@ async fn main() {
 
     // app.post("/form-urlencoded", handle_form_urlencoded);
 
-    app.post("/posts/:id/edit", |req: Params<IdParam>| async move {
+    app.post("/posts/:id/edit", |req: PathParam<IdParam>| async move {
         let id: u32 = req.value().id;
         format!("you are editing post<{}>", id)
     });

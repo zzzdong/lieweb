@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 
 use bytes::{Buf, Bytes, BytesMut};
+use headers::{Header, HeaderMapExt, HeaderName};
 use hyper::body::HttpBody;
 use hyper::http::header::{HeaderMap, HeaderValue};
 use hyper::http::request::Parts;
@@ -11,6 +12,7 @@ use serde::de::DeserializeOwned;
 
 pub type Request = hyper::Request<hyper::Body>;
 
+use crate::error::{invalid_header, invalid_param, missing_cookie, missing_header, missing_param};
 use crate::response::IntoResponse;
 use crate::Error;
 
@@ -21,74 +23,84 @@ pub trait FromRequest: Sized {
     async fn from_request(req: &mut RequestParts) -> Result<Self, Self::Rejection>;
 }
 
-pub struct RequestParts {
-    pub method: Method,
-    pub uri: Uri,
-    pub version: Version,
-    pub headers: HeaderMap<HeaderValue>,
-    pub extensions: Extensions,
-    pub body: Option<hyper::Body>,
+pub type RequestParts = hyper::Request<Option<hyper::Body>>;
+
+#[crate::async_trait]
+pub trait LieRequest {
+    fn path(&self) -> &str;
+    fn get_cookie(&self, name: &str) -> Result<String, Error>;
+    fn get_header<K>(&self, header: K) -> Result<&HeaderValue, Error>
+    where
+        HeaderName: From<K>;
+    fn get_typed_header<T: Header + Send + 'static>(&self) -> Result<T, Error>;
+    fn get_param<T>(&self, param: &str) -> Result<T, Error>
+    where
+        T: std::str::FromStr,
+        <T as std::str::FromStr>::Err: std::error::Error;
+
+    async fn read_body(&mut self) -> Result<Bytes, Error>;
+    async fn read_form<T: DeserializeOwned>(&mut self) -> Result<T, Error>;
+    async fn read_json<T: DeserializeOwned>(&mut self) -> Result<T, Error>;
 }
 
-impl RequestParts {
-    pub fn new(req: Request) -> Self {
-        let (parts, body) = req.into_parts();
-        let Parts {
-            method,
-            uri,
-            version,
-            headers,
-            extensions,
-            ..
-        } = parts;
-
-        RequestParts {
-            method,
-            uri,
-            version,
-            headers,
-            extensions,
-            body: Some(body),
-        }
-    }
-
-    pub fn method(&self) -> &Method {
-        &self.method
-    }
-
-    pub fn path(&self) -> &str {
+#[crate::async_trait]
+impl LieRequest for RequestParts {
+    fn path(&self) -> &str {
         self.uri().path()
     }
 
-    pub fn uri(&self) -> &Uri {
-        &self.uri
+    fn get_param<T>(&self, param: &str) -> Result<T, Error>
+    where
+        T: std::str::FromStr,
+        <T as std::str::FromStr>::Err: std::error::Error,
+    {
+        let ctx = self.extensions().get::<RequestCtx>();
+
+        match ctx {
+            Some(ctx) => match ctx.params.find(param) {
+                Some(param) => param
+                    .parse()
+                    .map_err(|e| invalid_param(param, std::any::type_name::<T>(), e)),
+                None => Err(missing_param(param)),
+            },
+            None => Err(missing_param(param)),
+        }
     }
 
-    pub fn version(&self) -> &Version {
-        &self.version
+    fn get_header<K>(&self, header: K) -> Result<&HeaderValue, Error>
+    where
+        HeaderName: From<K>,
+    {
+        let key: HeaderName = header.into();
+        let key_cloned = key.clone();
+        let value = self
+            .headers()
+            .get(key)
+            .ok_or_else(|| missing_header(key_cloned))?;
+
+        Ok(value)
     }
 
-    pub fn headers(&self) -> &HeaderMap<HeaderValue> {
-        &self.headers
+    fn get_typed_header<T: Header + Send + 'static>(&self) -> Result<T, Error> {
+        self.headers()
+            .typed_get::<T>()
+            .ok_or_else(|| invalid_header(T::name().as_str()))
     }
 
-    pub fn headers_mut(&mut self) -> &mut HeaderMap<HeaderValue> {
-        &mut self.headers
+    fn get_cookie(&self, name: &str) -> Result<String, Error> {
+        let cookie: headers::Cookie = self.get_typed_header()?;
+
+        cookie
+            .get(name)
+            .ok_or_else(|| missing_cookie(name))
+            .map(|s| s.to_string())
     }
 
-    pub fn extensions(&self) -> &Extensions {
-        &self.extensions
-    }
-
-    pub fn extensions_mut(&mut self) -> &mut Extensions {
-        &mut self.extensions
-    }
-
-    pub async fn read_body(&mut self) -> Result<Bytes, Error> {
+    async fn read_body(&mut self) -> Result<Bytes, Error> {
         let mut bufs = BytesMut::new();
 
-        match &mut self.body {
-            Some(body) => {
+        match self.body_mut() {
+            Some(ref mut body) => {
                 while let Some(buf) = body.data().await {
                     let buf = buf?;
                     if buf.has_remaining() {
@@ -102,34 +114,130 @@ impl RequestParts {
         }
     }
 
-    pub async fn read_form<T: DeserializeOwned>(&mut self) -> Result<T, Error> {
+    async fn read_form<T: DeserializeOwned>(&mut self) -> Result<T, Error> {
         let body = self.read_body().await?;
         let form = serde_urlencoded::from_bytes(&body)?;
 
         Ok(form)
     }
 
-    pub async fn read_json<T: DeserializeOwned>(&mut self) -> Result<T, Error> {
+    async fn read_json<T: DeserializeOwned>(&mut self) -> Result<T, Error> {
         let body = self.read_body().await?;
         let json = serde_json::from_slice(&body)?;
 
         Ok(json)
     }
-
-    pub(crate) fn from_other(other: &mut Self) -> Self {
-        let body = None;
-        let extensions = Extensions::new();
-
-        RequestParts {
-            method: other.method.clone(),
-            uri: other.uri.clone(),
-            version: other.version,
-            headers: other.headers.clone(),
-            extensions: std::mem::replace(&mut other.extensions, extensions),
-            body: std::mem::replace(&mut other.body, body),
-        }
-    }
 }
+
+// pub struct RequestParts {
+//     pub method: Method,
+//     pub uri: Uri,
+//     pub version: Version,
+//     pub headers: HeaderMap<HeaderValue>,
+//     pub extensions: Extensions,
+//     pub body: Option<hyper::Body>,
+// }
+
+// impl RequestParts {
+//     pub fn new(req: Request) -> Self {
+//         let (parts, body) = req.into_parts();
+//         let Parts {
+//             method,
+//             uri,
+//             version,
+//             headers,
+//             extensions,
+//             ..
+//         } = parts;
+
+//         RequestParts {
+//             method,
+//             uri,
+//             version,
+//             headers,
+//             extensions,
+//             body: Some(body),
+//         }
+//     }
+
+//     pub fn method(&self) -> &Method {
+//         &self.method
+//     }
+
+//     pub fn path(&self) -> &str {
+//         self.uri().path()
+//     }
+
+//     pub fn uri(&self) -> &Uri {
+//         &self.uri
+//     }
+
+//     pub fn version(&self) -> &Version {
+//         &self.version
+//     }
+
+//     pub fn headers(&self) -> &HeaderMap<HeaderValue> {
+//         &self.headers
+//     }
+
+//     pub fn headers_mut(&mut self) -> &mut HeaderMap<HeaderValue> {
+//         &mut self.headers
+//     }
+
+//     pub fn extensions(&self) -> &Extensions {
+//         &self.extensions
+//     }
+
+//     pub fn extensions_mut(&mut self) -> &mut Extensions {
+//         &mut self.extensions
+//     }
+
+//     pub async fn read_body(&mut self) -> Result<Bytes, Error> {
+//         let mut bufs = BytesMut::new();
+
+//         match &mut self.body {
+//             Some(body) => {
+//                 while let Some(buf) = body.data().await {
+//                     let buf = buf?;
+//                     if buf.has_remaining() {
+//                         bufs.extend(buf);
+//                     }
+//                 }
+
+//                 Ok(bufs.freeze())
+//             }
+//             None => Ok(bufs.freeze()),
+//         }
+//     }
+
+//     pub async fn read_form<T: DeserializeOwned>(&mut self) -> Result<T, Error> {
+//         let body = self.read_body().await?;
+//         let form = serde_urlencoded::from_bytes(&body)?;
+
+//         Ok(form)
+//     }
+
+//     pub async fn read_json<T: DeserializeOwned>(&mut self) -> Result<T, Error> {
+//         let body = self.read_body().await?;
+//         let json = serde_json::from_slice(&body)?;
+
+//         Ok(json)
+//     }
+
+//     pub(crate) fn from_other(other: &mut Self) -> Self {
+//         let body = None;
+//         let extensions = Extensions::new();
+
+//         RequestParts {
+//             method: other.method.clone(),
+//             uri: other.uri.clone(),
+//             version: other.version,
+//             headers: other.headers.clone(),
+//             extensions: std::mem::replace(&mut other.extensions, extensions),
+//             body: std::mem::replace(&mut other.body, body),
+//         }
+//     }
+// }
 
 #[derive(Debug, Clone)]
 pub(crate) struct RequestCtx {

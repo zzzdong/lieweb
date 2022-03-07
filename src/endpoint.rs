@@ -108,7 +108,8 @@ macro_rules! impl_handler {
             $( $ty: FromRequest + Send,)*
         {
             async fn call(self, req: Request) -> Response {
-                let mut req = RequestParts::new(req);
+                let (parts, body) = req.into_parts();
+                let mut req = hyper::Request::from_parts(parts, Some(body));
 
                 $(
                     let $ty = match $ty::from_request(&mut req).await {

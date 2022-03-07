@@ -1,4 +1,7 @@
-use lieweb::{App, Params};
+use lieweb::{
+    request::{LieRequest, RequestParts},
+    App,
+};
 
 #[tokio::main]
 async fn main() {
@@ -8,8 +11,8 @@ async fn main() {
     app.get("/", || async move { "Hello, world!" });
 
     // GET /hello/lieweb => 200 OK with body "Hello, lieweb!"
-    app.get("/hello/:name", |req: Params| async move {
-        let name = req.get::<String>("name");
+    app.get("/hello/:name", |req: RequestParts| async move {
+        let name = req.get_param::<String>("name");
 
         format!("Hello, {:?}!", name)
     });

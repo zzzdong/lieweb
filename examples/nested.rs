@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use lieweb::{
-    http, middleware, request::RequestParts, App, AppState, LieResponse, RemoteAddr, Router,
+    http, middleware,
+    request::{LieRequest, RequestParts},
+    App, AppState, LieResponse, RemoteAddr, Router,
 };
 use tokio::sync::Mutex;
 
