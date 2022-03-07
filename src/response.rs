@@ -3,6 +3,7 @@ use std::{borrow::Cow, convert::Infallible};
 
 use bytes::Bytes;
 use futures::Stream;
+
 use hyper::http::{
     self,
     header::{HeaderMap, HeaderName, HeaderValue},
@@ -23,7 +24,7 @@ impl IntoResponse for Response {
 
 impl IntoResponse for Infallible {
     fn into_response(self) -> Response {
-        LieResponse::new().into()
+        LieResponse::default().into()
     }
 }
 
@@ -32,12 +33,17 @@ pub struct LieResponse {
 }
 
 impl LieResponse {
-    pub fn new() -> Self {
-        Response::default().into()
+    pub fn new(status: StatusCode, body: impl Into<hyper::Body>) -> Self {
+        LieResponse {
+            inner: http::Response::builder()
+                .status(status)
+                .body(body.into())
+                .unwrap(),
+        }
     }
 
     pub fn with_status(status: StatusCode) -> Self {
-        let resp = Self::new();
+        let resp = Self::default();
         resp.set_status(status)
     }
 
@@ -196,7 +202,9 @@ impl LieResponse {
 
 impl Default for LieResponse {
     fn default() -> Self {
-        Self::new()
+        LieResponse {
+            inner: Response::default(),
+        }
     }
 }
 

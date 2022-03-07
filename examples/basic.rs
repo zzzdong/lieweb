@@ -42,6 +42,11 @@ async fn not_found(req: RequestParts) -> LieResponse {
 //     Ok(LieResponse::with_json(&form))
 // }
 
+#[derive(serde::Deserialize)]
+struct IdParam {
+    pub id: u32,
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -79,8 +84,8 @@ async fn main() {
 
     // app.post("/form-urlencoded", handle_form_urlencoded);
 
-    app.post("/posts/:id/edit", |req: Params| async move {
-        let id: u32 = req.get("id").unwrap();
+    app.post("/posts/:id/edit", |req: Params<IdParam>| async move {
+        let id: u32 = req.value().id;
         format!("you are editing post<{}>", id)
     });
 
