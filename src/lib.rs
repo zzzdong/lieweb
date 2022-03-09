@@ -12,7 +12,7 @@ mod utils;
 
 pub use error::Error;
 pub use extracts::{AppState, PathParam, Query, RemoteAddr};
-pub use request::Request;
+pub use request::{LieRequest, Request};
 pub use response::{LieResponse, Response};
 pub use router::Router;
 pub use server::{server_id, App};

@@ -16,7 +16,7 @@ impl AccessLog {
     async fn log_basic<'a>(&'a self, ctx: Request, next: Next<'a>) -> Response {
         let path = ctx.uri().path().to_owned();
         let method = ctx.method().as_str().to_owned();
-        let remote_addr = RequestCtx::get_remote_addr(&ctx)
+        let remote_addr = RequestCtx::extract_remote_addr(&ctx)
             .map(|a| a.to_string())
             .unwrap_or_default();
 

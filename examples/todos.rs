@@ -72,7 +72,8 @@ mod handlers {
     use lieweb::AppState;
     use lieweb::PathParam;
     use lieweb::Query;
-    use lieweb::{http::StatusCode, request::RequestParts, LieResponse};
+    use lieweb::Request;
+    use lieweb::{http::StatusCode, LieResponse};
 
     #[derive(Debug, serde::Deserialize)]
     pub struct TodoId {
@@ -99,7 +100,7 @@ mod handlers {
 
     pub async fn create_todo(
         state: AppState<State>,
-        mut req: RequestParts,
+        mut req: Request,
     ) -> Result<LieResponse, lieweb::Error> {
         let create: Todo = req.read_json().await?;
 
@@ -121,7 +122,7 @@ mod handlers {
     pub async fn update_todo(
         params: PathParam<TodoId>,
         state: AppState<State>,
-        mut req: RequestParts,
+        mut req: Request,
     ) -> Result<LieResponse, lieweb::Error> {
         let todo_id: u64 = params.value().id;
 

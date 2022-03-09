@@ -2,7 +2,7 @@ use std::future::Future;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use crate::request::{FromRequest, RequestParts};
+use crate::request::FromRequest;
 use crate::response::IntoResponse;
 use crate::router::Router;
 use crate::{Request, Response};

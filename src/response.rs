@@ -363,6 +363,19 @@ impl IntoResponse for Cow<'static, str> {
     }
 }
 
+impl IntoResponse for (StatusCode, &'static str) {
+    fn into_response(self) -> Response {
+        http::Response::builder()
+            .status(self.0)
+            .header(
+                hyper::header::CONTENT_TYPE,
+                mime::TEXT_PLAIN_UTF_8.to_string(),
+            )
+            .body(hyper::Body::from(self.1))
+            .unwrap()
+    }
+}
+
 impl<E, R> From<Result<R, E>> for LieResponse
 where
     R: Into<LieResponse>,

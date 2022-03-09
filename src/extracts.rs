@@ -5,7 +5,7 @@ use std::{
 };
 
 use hyper::StatusCode;
-use serde::{de::DeserializeOwned, Deserialize};
+use serde::de::DeserializeOwned;
 
 use crate::{
     middleware::WithState,
@@ -54,7 +54,7 @@ where
 
     async fn from_request(req: &mut RequestParts) -> Result<Self, Self::Rejection> {
         let empty = route_recognizer::Params::new();
-        let params = RequestCtx::params(req).unwrap_or(&empty);
+        let params = RequestCtx::extract_params(req).unwrap_or(&empty);
 
         PathParam::from_params(params)
     }
@@ -106,9 +106,11 @@ pub struct StateRejection;
 
 impl IntoResponse for StateRejection {
     fn into_response(self) -> Response {
-        LieResponse::with_str("can not extract AppState")
-            .set_status(StatusCode::INTERNAL_SERVER_ERROR)
-            .into()
+        LieResponse::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "can not extract AppState",
+        )
+        .into()
     }
 }
 
@@ -119,28 +121,6 @@ pub struct RemoteAddr {
 impl RemoteAddr {
     pub fn value(&self) -> Option<SocketAddr> {
         self.addr
-    }
-}
-
-#[crate::async_trait]
-impl FromRequest for RemoteAddr {
-    type Rejection = Infallible;
-
-    async fn from_request(req: &mut RequestParts) -> Result<Self, Self::Rejection> {
-        let addr = RequestCtx::remote_addr(req);
-
-        Ok(RemoteAddr { addr })
-    }
-}
-
-#[crate::async_trait]
-impl FromRequest for RequestParts {
-    type Rejection = Infallible;
-
-    async fn from_request(req: &mut RequestParts) -> Result<Self, Self::Rejection> {
-        let empty = hyper::Request::default();
-        let req = std::mem::replace(req, empty);
-        Ok(req)
     }
 }
 
@@ -187,6 +167,65 @@ impl IntoResponse for QueryRejection {
         match self {
             Self::DecodeFailed(e) => LieResponse::with_status(StatusCode::BAD_REQUEST).into(),
         }
+    }
+}
+
+#[crate::async_trait]
+impl FromRequest for RemoteAddr {
+    type Rejection = Infallible;
+
+    async fn from_request(req: &mut RequestParts) -> Result<Self, Self::Rejection> {
+        let addr = RequestCtx::extract_remote_addr(req);
+
+        Ok(RemoteAddr { addr })
+    }
+}
+
+#[crate::async_trait]
+impl FromRequest for RequestParts {
+    type Rejection = Infallible;
+
+    async fn from_request(req: &mut RequestParts) -> Result<Self, Self::Rejection> {
+        let empty = hyper::Request::default();
+        let req = std::mem::replace(req, empty);
+        Ok(req)
+    }
+}
+
+#[crate::async_trait]
+impl FromRequest for crate::Request {
+    type Rejection = RequestRejection;
+
+    async fn from_request(req: &mut RequestParts) -> Result<Self, Self::Rejection> {
+        let empty = hyper::Request::default();
+        let req = std::mem::replace(req, empty);
+
+        let (parts, body) = req.into_parts();
+
+        match body {
+            Some(body) => Ok(hyper::Request::from_parts(parts, body)),
+            None => Err(RequestRejection),
+        }
+    }
+}
+
+pub struct RequestRejection;
+
+impl IntoResponse for RequestRejection {
+    fn into_response(self) -> Response {
+        LieResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "Body has been taken").into()
+    }
+}
+
+#[crate::async_trait]
+impl<R> FromRequest for Result<R, R::Rejection>
+where
+    R: FromRequest,
+{
+    type Rejection = Infallible;
+
+    async fn from_request(req: &mut RequestParts) -> Result<Self, Self::Rejection> {
+        Ok(FromRequest::from_request(req).await)
     }
 }
 
@@ -418,7 +457,6 @@ mod params_de {
     #[cfg(test)]
     mod test {
         use super::from_params;
-        use crate::PathParam;
 
         #[test]
         fn test() {

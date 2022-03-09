@@ -3,7 +3,7 @@ use std::sync::Arc;
 use lieweb::{
     http, middleware,
     request::{LieRequest, RequestParts},
-    App, AppState, LieResponse, RemoteAddr, Router,
+    App, AppState, LieResponse, RemoteAddr, Request, Router,
 };
 use tokio::sync::Mutex;
 
@@ -68,19 +68,17 @@ async fn main() {
 fn posts_router() -> Router {
     let mut posts = Router::new();
 
-    posts.register(http::Method::GET, "/new", |req: RequestParts| async move {
+    posts.register(http::Method::GET, "/new", |req: Request| async move {
         format!("on /posts/new, {}", req.path())
     });
 
-    posts.register(http::Method::GET, "/edit", |req: RequestParts| async move {
+    posts.register(http::Method::GET, "/edit", |req: Request| async move {
         format!("on /posts/edit, {}", req.path())
     });
 
-    posts.register(
-        http::Method::GET,
-        "/delete",
-        |req: RequestParts| async move { format!("on /posts/delete, {}", req.path()) },
-    );
+    posts.register(http::Method::GET, "/delete", |req: Request| async move {
+        format!("on /posts/delete, {}", req.path())
+    });
 
     posts.set_not_found_handler(|| async move {
         LieResponse::with_html("posts handler Not Found").set_status(http::StatusCode::NOT_FOUND)

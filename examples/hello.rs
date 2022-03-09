@@ -1,5 +1,5 @@
 use lieweb::{
-    request::{LieRequest, RequestParts},
+    request::{LieRequest, Request},
     App,
 };
 
@@ -11,7 +11,7 @@ async fn main() {
     app.get("/", || async move { "Hello, world!" });
 
     // GET /hello/lieweb => 200 OK with body "Hello, lieweb!"
-    app.get("/hello/:name", |req: RequestParts| async move {
+    app.get("/hello/:name", |req: Request| async move {
         let name = req.get_param::<String>("name");
 
         format!("Hello, {:?}!", name)
