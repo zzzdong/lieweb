@@ -24,7 +24,7 @@ where
 {
     async fn call(&self, req: Request) -> Response {
         let resp = self(req).await;
-        resp.into().into()
+        resp.into()
     }
 }
 

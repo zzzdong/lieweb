@@ -68,10 +68,6 @@ pub fn invalid_param(
     }
 }
 
-pub fn missing_appstate(name: &'static str) -> Error {
-    Error::MissingAppState { name }
-}
-
 pub fn missing_cookie(name: impl ToString) -> Error {
     Error::MissingCookie {
         name: name.to_string(),

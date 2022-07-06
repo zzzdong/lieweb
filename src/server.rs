@@ -83,7 +83,7 @@ impl App {
     }
 
     pub async fn respond(self, req: Request) -> Response {
-        let mut req = req.into();
+        let mut req = req;
         RequestCtx::init(&mut req, None);
 
         let App { router } = self;
@@ -118,7 +118,7 @@ impl App {
                         async move {
                             let endpoint = RouterEndpoint::new(router);
                             let resp = endpoint.call(req).await;
-                            Ok::<_, Error>(resp.into())
+                            Ok::<_, Error>(resp)
                         }
                     }),
                 );

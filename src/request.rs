@@ -147,9 +147,7 @@ impl RequestCtx {
     }
 
     pub(crate) fn extract_params<B>(req: &http::Request<B>) -> Option<&Params> {
-        req.extensions()
-            .get::<Self>()
-            .and_then(|ctx| Some(&ctx.params))
+        req.extensions().get::<Self>().map(|ctx| &ctx.params)
     }
 
     pub(crate) fn extract_remote_addr<B>(req: &http::Request<B>) -> Option<SocketAddr> {

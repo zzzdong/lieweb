@@ -12,9 +12,7 @@ pub struct WithState<T: Clone + Send + Sync + 'static> {
 impl<T: Clone + Send + Sync + 'static> WithState<T> {
     pub fn new(extension: T) -> Self {
         WithState {
-            extension: AppState {
-                inner: extension.clone(),
-            },
+            extension: AppState { inner: extension },
         }
     }
 

@@ -28,6 +28,7 @@ impl IntoResponse for Infallible {
     }
 }
 
+#[derive(Default)]
 pub struct LieResponse {
     pub(crate) inner: Response,
 }
@@ -200,14 +201,6 @@ impl LieResponse {
     }
 }
 
-impl Default for LieResponse {
-    fn default() -> Self {
-        LieResponse {
-            inner: Response::default(),
-        }
-    }
-}
-
 impl From<Response> for LieResponse {
     fn from(response: Response) -> Self {
         LieResponse { inner: response }
@@ -235,7 +228,7 @@ impl From<StatusCode> for LieResponse {
 impl IntoResponse for StatusCode {
     fn into_response(self) -> Response {
         http::Response::builder()
-            .status(self.clone())
+            .status(self)
             .header(
                 hyper::header::CONTENT_TYPE,
                 mime::TEXT_PLAIN_UTF_8.to_string(),
@@ -412,7 +405,6 @@ where
                     .status(StatusCode::INTERNAL_SERVER_ERROR)
                     .body(hyper::Body::from("Internal Server Error"))
                     .unwrap()
-                    .into()
             }
         }
     }

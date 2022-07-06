@@ -18,7 +18,11 @@ pub struct ParamsRejection(params_de::Error);
 
 impl IntoResponse for ParamsRejection {
     fn into_response(self) -> Response {
-        LieResponse::new(StatusCode::BAD_REQUEST, format!("Path param parse error")).into()
+        LieResponse::new(
+            StatusCode::BAD_REQUEST,
+            "Path param parse error".to_string(),
+        )
+        .into()
     }
 }
 
@@ -33,7 +37,7 @@ where
     pub(crate) fn from_params(params: &route_recognizer::Params) -> Result<Self, ParamsRejection> {
         params_de::from_params::<T>(params)
             .map(|value| PathParam { value })
-            .map_err(|e| ParamsRejection(e))
+            .map_err(ParamsRejection)
     }
 
     pub fn value(&self) -> &T {
@@ -165,7 +169,10 @@ pub enum QueryRejection {
 impl IntoResponse for QueryRejection {
     fn into_response(self) -> Response {
         match self {
-            Self::DecodeFailed(e) => LieResponse::with_status(StatusCode::BAD_REQUEST).into(),
+            Self::DecodeFailed(e) => {
+                tracing::error!("QueryRejection::DecodeFailed: {:?}", e);
+                LieResponse::with_status(StatusCode::BAD_REQUEST).into()
+            }
         }
     }
 }
@@ -272,7 +279,7 @@ mod params_de {
         }
     }
 
-    pub fn from_params<'a, T>(params: &'a route_recognizer::Params) -> Result<T, Error>
+    pub fn from_params<T>(params: &route_recognizer::Params) -> Result<T, Error>
     where
         T: DeserializeOwned,
     {
@@ -285,7 +292,7 @@ mod params_de {
     impl<'de, 'a> Deserializer<'de> for &'a mut PathParamsDeserialzer<'de> {
         type Error = Error;
 
-        fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+        fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
         where
             V: serde::de::Visitor<'de>,
         {
@@ -298,7 +305,7 @@ mod params_de {
             tuple_struct enum identifier ignored_any
         }
 
-        fn deserialize_map<V>(mut self, visitor: V) -> Result<V::Value, Self::Error>
+        fn deserialize_map<V>(self, visitor: V) -> Result<V::Value, Self::Error>
         where
             V: serde::de::Visitor<'de>,
         {
@@ -344,13 +351,13 @@ mod params_de {
                 }
             }
 
-            visitor.visit_map(Access::new(&mut self))
+            visitor.visit_map(Access::new(self))
         }
 
         fn deserialize_struct<V>(
             self,
-            name: &'static str,
-            fields: &'static [&'static str],
+            _name: &'static str,
+            _fields: &'static [&'static str],
             visitor: V,
         ) -> Result<V::Value, Self::Error>
         where
@@ -386,10 +393,10 @@ mod params_de {
         };
     }
 
-    impl<'de, 'a> Deserializer<'de> for PartDeserialzer<'de> {
+    impl<'de> Deserializer<'de> for PartDeserialzer<'de> {
         type Error = Error;
 
-        fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+        fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
         where
             V: de::Visitor<'de>,
         {
@@ -443,8 +450,8 @@ mod params_de {
 
         fn deserialize_enum<V>(
             self,
-            name: &'static str,
-            variants: &'static [&'static str],
+            _name: &'static str,
+            _variants: &'static [&'static str],
             visitor: V,
         ) -> Result<V::Value, Self::Error>
         where
@@ -461,22 +468,23 @@ mod params_de {
         #[test]
         fn test() {
             let mut params = route_recognizer::Params::new();
-            params.insert("version".into(), "v1".into());
+            params.insert("version".into(), "v2".into());
             params.insert("id".into(), "123".into());
             params.insert("flag".into(), "false".into());
 
             #[derive(Debug, serde::Deserialize)]
+            #[serde(rename_all = "camelCase")]
             enum Version {
-                v1,
-                v2,
+                V1,
+                V2,
             }
 
             #[derive(Debug, serde::Deserialize)]
             struct PathParams {
-                pub version: Version,
-                pub id: Option<u32>,
-                pub name: Option<String>,
-                pub flag: bool,
+                version: Version,
+                id: Option<u32>,
+                name: Option<String>,
+                flag: bool,
             }
 
             let p: PathParams = from_params(&params).unwrap();

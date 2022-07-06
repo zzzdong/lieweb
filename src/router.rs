@@ -195,7 +195,7 @@ impl Router {
 
         let method = req.method().clone();
 
-        let path = RequestCtx::route_path(&mut req);
+        let path = RequestCtx::route_path(&req);
         let Selection { endpoint, params } = self.find(path, method);
 
         RequestCtx::merge_params(&mut req, &params);
