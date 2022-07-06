@@ -83,7 +83,9 @@ impl App {
     }
 
     pub async fn respond(self, req: Request) -> Response {
-        let req = req.into();
+        let mut req = req.into();
+        RequestCtx::init(&mut req, None);
+
         let App { router } = self;
 
         let router = Arc::new(router);
@@ -198,7 +200,10 @@ pub fn server_id() -> &'static str {
 
 #[cfg(test)]
 mod test {
-    use crate::{App, Request, Router};
+    use bytes::Buf;
+    use hyper::body::HttpBody;
+
+    use crate::{App, Request, Response, Router};
 
     fn app() -> App {
         let mut app = App::new();
@@ -217,35 +222,53 @@ mod test {
             .unwrap()
     }
 
-    // #[tokio::test]
-    // async fn basic() {
-    //     let mut resp = app().respond(request("GET", "/")).await;
-    //     assert_eq!(resp.body_bytes().await.unwrap(), b"/".to_vec())
-    // }
+    async fn body_bytes(resp: &mut Response) -> Vec<u8> {
+        let mut bufs = bytes::BytesMut::new();
 
-    // #[tokio::test]
-    // async fn basic_post() {
-    //     let mut resp = app().respond(request("POST", "/post")).await;
-    //     assert_eq!(resp.body_bytes().await.unwrap(), b"/post".to_vec())
-    // }
+        while let Some(buf) = resp.body_mut().data().await {
+            let buf = buf.unwrap();
+            if buf.has_remaining() {
+                bufs.extend(buf);
+            }
+        }
 
-    // #[tokio::test]
-    // async fn tree() {
-    //     let mut app = app();
+        bufs.freeze().to_vec()
+    }
 
-    //     let mut router_c = Router::new();
-    //     router_c.get("/c", |_| async move { "a-b-c" });
+    #[tokio::test]
+    async fn basic() {
+        let mut resp = app().respond(request("GET", "/")).await;
+        assert_eq!(body_bytes(&mut resp).await, b"/".to_vec())
+    }
 
-    //     let mut router_b = Router::new();
-    //     router_b.merge("/b/", router_c).unwrap();
+    #[tokio::test]
+    async fn basic_post() {
+        let mut resp = app().respond(request("POST", "/post")).await;
+        assert_eq!(body_bytes(&mut resp).await, b"/post".to_vec())
+    }
 
-    //     app.merge("/a/", router_b).unwrap();
+    #[tokio::test]
+    async fn tree() {
+        let mut app = app();
 
-    //     let mut resp = app.respond(request("GET", "/a/b/c")).await;
-    //     assert_eq!(resp.status(), 200);
+        app.get("/aa", || async move { "aa" });
 
-    //     let body = resp.body_bytes().await.unwrap();
+        let mut router_c = Router::new();
+        router_c.get("/c", || async move { "a-b-c" });
 
-    //     assert_eq!(body, b"a-b-c".to_vec());
-    // }
+        let mut router_b = Router::new();
+        router_b.merge("/b/", router_c).unwrap();
+
+        app.merge("/a/", router_b).unwrap();
+
+        // let mut resp = app.respond(request("GET", "/aa")).await;
+        // let body = body_bytes(&mut resp).await;
+        // assert_eq!(body, b"aa".to_vec());
+
+        let mut resp = app.respond(request("GET", "/a/b/c")).await;
+        assert_eq!(resp.status(), 200);
+
+        let body = body_bytes(&mut resp).await;
+        assert_eq!(body, b"a-b-c".to_vec());
+    }
 }
