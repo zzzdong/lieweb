@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use lieweb::{
-    http, middleware, request::RequestParts, App, AppState, LieResponse, PathParam, RemoteAddr,
+    http, middleware, request::RequestParts, App, AppState, Error, LieRequest, LieResponse,
+    PathParam, RemoteAddr, Request,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
@@ -34,13 +35,13 @@ async fn not_found(req: RequestParts) -> LieResponse {
     LieResponse::with_status(http::StatusCode::NOT_FOUND)
 }
 
-// async fn handle_form_urlencoded(mut req: RequestCtx) -> Result<LieResponse, Error> {
-//     let form: serde_json::Value = req.read_form().await?;
+async fn handle_form_urlencoded(mut req: Request) -> Result<LieResponse, Error> {
+    let form: serde_json::Value = req.read_form().await?;
 
-//     println!("form=> {:?}", form);
+    println!("form=> {:?}", form);
 
-//     Ok(LieResponse::with_json(&form))
-// }
+    Ok(LieResponse::with_json(&form))
+}
 
 #[derive(serde::Deserialize)]
 struct IdParam {
@@ -49,9 +50,7 @@ struct IdParam {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
+    tracing_subscriber::fmt().init();
 
     let mut addr = DEFAULT_ADDR.to_string();
 
@@ -82,7 +81,7 @@ async fn main() {
         LieResponse::with_json(&msg)
     });
 
-    // app.post("/form-urlencoded", handle_form_urlencoded);
+    app.post("/form-urlencoded", handle_form_urlencoded);
 
     app.post("/posts/:id/edit", |req: PathParam<IdParam>| async move {
         let id: u32 = req.value().id;

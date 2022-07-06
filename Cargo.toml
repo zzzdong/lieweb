@@ -21,7 +21,7 @@ tls = [ "tokio-rustls" ]
 [dependencies]
 async-trait = "0.1"
 bytes = "1.0"
-cookie = "0.15"
+cookie = "0.16"
 futures = "0.3"
 futures-util = "0.3"
 headers = "0.3"
@@ -36,12 +36,12 @@ serde_json = "1.0"
 serde_urlencoded = "0.7"
 thiserror = "1.0"
 tokio = "1.0"
-tokio-rustls = { version="0.22", optional=true }
-tokio-util = "0.6"
+tokio-rustls = { version="0.23", optional=true }
+tokio-util = { version="0.7", features=["codec"] }
 tracing = "0.1"
 
 [dev-dependencies]
-tracing-subscriber = "0.2"
+tracing-subscriber = "0.3"
 tokio = { version="1.0", features=["full"] }
 serde = { version="1.0", features=["derive"] }
 
