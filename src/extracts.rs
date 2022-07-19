@@ -4,14 +4,15 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use hyper::StatusCode;
+use bytes::{Buf, Bytes, BytesMut};
+use hyper::{body::HttpBody, Body, StatusCode};
 use serde::de::DeserializeOwned;
 
 use crate::{
     middleware::WithState,
     request::{FromRequest, RequestCtx, RequestParts},
     response::IntoResponse,
-    LieResponse, Response,
+    Json, LieResponse, Response,
 };
 
 pub struct ParamsRejection(params_de::Error);
@@ -201,7 +202,7 @@ impl FromRequest for RequestParts {
 
 #[crate::async_trait]
 impl FromRequest for crate::Request {
-    type Rejection = RequestRejection;
+    type Rejection = BodyBeenTaken;
 
     async fn from_request(req: &mut RequestParts) -> Result<Self, Self::Rejection> {
         let empty = hyper::Request::default();
@@ -211,14 +212,33 @@ impl FromRequest for crate::Request {
 
         match body {
             Some(body) => Ok(hyper::Request::from_parts(parts, body)),
-            None => Err(RequestRejection),
+            None => Err(BodyBeenTaken),
         }
     }
 }
 
-pub struct RequestRejection;
+#[derive(Debug)]
+pub enum ReadBodyRejection {
+    BodyBeenTaken(BodyBeenTaken),
+    ReadFailed(hyper::Error),
+}
 
-impl IntoResponse for RequestRejection {
+impl IntoResponse for ReadBodyRejection {
+    fn into_response(self) -> Response {
+        match self {
+            ReadBodyRejection::BodyBeenTaken(e) => e.into_response(),
+            ReadBodyRejection::ReadFailed(e) => {
+                tracing::error!("ReadBodyRejection failed {:?}", self);
+                LieResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "Read body failed").into()
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct BodyBeenTaken;
+
+impl IntoResponse for BodyBeenTaken {
     fn into_response(self) -> Response {
         LieResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "Body has been taken").into()
     }
@@ -234,6 +254,60 @@ where
     async fn from_request(req: &mut RequestParts) -> Result<Self, Self::Rejection> {
         Ok(FromRequest::from_request(req).await)
     }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum JsonRejection {
+    #[error("read body failed")]
+    ReadBody(ReadBodyRejection),
+    #[error("decode json error")]
+    DecodeFailed(#[from] serde_json::Error),
+}
+
+impl IntoResponse for JsonRejection {
+    fn into_response(self) -> Response {
+        match self {
+            JsonRejection::ReadBody(e) => e.into_response(),
+            JsonRejection::DecodeFailed(e) => {
+                tracing::error!("JsonRejection::DecodeFailed: {:?}", e);
+                LieResponse::with_status(StatusCode::BAD_REQUEST).into()
+            }
+        }
+    }
+}
+
+#[crate::async_trait]
+impl<T> FromRequest for Json<T>
+where
+    T: serde::de::DeserializeOwned,
+{
+    type Rejection = JsonRejection;
+
+    async fn from_request(req: &mut RequestParts) -> Result<Self, Self::Rejection> {
+        let body = read_body(req).await.map_err(JsonRejection::ReadBody)?;
+
+        let value: T = serde_json::from_slice(&body)?;
+
+        Ok(Json::new(value))
+    }
+}
+
+async fn read_body(req: &mut RequestParts) -> Result<Bytes, ReadBodyRejection> {
+    let mut body = req
+        .body_mut()
+        .take()
+        .ok_or_else(|| ReadBodyRejection::BodyBeenTaken(BodyBeenTaken))?;
+
+    let mut bufs = BytesMut::new();
+
+    while let Some(buf) = body.data().await {
+        let buf = buf.map_err(ReadBodyRejection::ReadFailed)?;
+        if buf.has_remaining() {
+            bufs.extend(buf);
+        }
+    }
+
+    Ok(bufs.freeze())
 }
 
 mod params_de {

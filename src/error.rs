@@ -8,8 +8,10 @@ pub enum Error {
     HttpError(#[from] hyper::http::Error),
     #[error("serde_json error")]
     JsonError(#[from] serde_json::Error),
-    #[error("decode query string error")]
-    QueryError(#[from] serde_urlencoded::de::Error),
+    #[error("serde_urlencoded decode error")]
+    FormDecodeError(#[from] serde_urlencoded::de::Error),
+    #[error("serde_urlencoded decode error")]
+    FormEncodeError(#[from] serde_urlencoded::ser::Error),
     #[error("lieweb error")]
     Message(String),
     #[error("invalid request header {name:?}")]

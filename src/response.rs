@@ -2,13 +2,14 @@ use std::convert::TryFrom;
 use std::{borrow::Cow, convert::Infallible};
 
 use bytes::Bytes;
-use futures::Stream;
 
 use hyper::http::{
     self,
     header::{HeaderMap, HeaderName, HeaderValue},
     StatusCode,
 };
+
+use crate::ty::{BytesBody, Form, Html, Json, StreamBody};
 
 pub type Response = http::Response<hyper::Body>;
 
@@ -53,14 +54,14 @@ impl LieResponse {
         hyper::Body: From<T>,
         T: Send,
     {
-        html(body).into()
+        Html::new(body).into()
     }
 
-    pub fn with_json<T>(val: &T) -> Self
+    pub fn with_json<T>(val: T) -> Self
     where
         T: serde::Serialize,
     {
-        json(val).into()
+        Json::new(val).into()
     }
 
     pub fn with_bytes(val: &'static [u8]) -> Self {
@@ -81,11 +82,11 @@ impl LieResponse {
 
     pub fn with_stream<S, B, E>(s: S, content_type: mime::Mime) -> Self
     where
-        S: Stream<Item = Result<B, E>> + Send + 'static,
+        S: futures::Stream<Item = Result<B, E>> + Send + 'static,
         B: Into<Bytes> + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
-        WithStream::new(s, content_type).into()
+        StreamBody::new(s, content_type).into()
     }
 
     pub async fn send_file(path: impl AsRef<std::path::Path>) -> Result<Self, crate::Error> {
@@ -392,7 +393,6 @@ impl From<crate::Error> for LieResponse {
     }
 }
 
-
 impl<E, R> From<Result<R, E>> for LieResponse
 where
     R: Into<LieResponse>,
@@ -419,16 +419,29 @@ where
     }
 }
 
-pub struct Html<T> {
-    body: T,
-}
-
-pub fn html<T>(body: T) -> Html<T>
+impl<T> From<Form<T>> for LieResponse
 where
-    hyper::Body: From<T>,
-    T: Send,
+    T: serde::Serialize,
 {
-    Html { body }
+    fn from(form: Form<T>) -> LieResponse {
+        serde_urlencoded::to_string(&form.body)
+            .map(|b| {
+                LieResponse::from(
+                    http::Response::builder()
+                        .header(
+                            hyper::header::CONTENT_TYPE,
+                            mime::APPLICATION_WWW_FORM_URLENCODED.to_string(),
+                        )
+                        .body(hyper::Body::from(b))
+                        .unwrap(),
+                )
+            })
+            .map_err(|e| {
+                tracing::error!("urlencoded form serialize failed, {:?}", e);
+                crate::Error::from(e)
+            })
+            .into()
+    }
 }
 
 impl<T> From<Html<T>> for LieResponse
@@ -448,66 +461,51 @@ where
     }
 }
 
-pub struct Json {
-    inner: Result<Vec<u8>, serde_json::Error>,
-}
-
-pub fn json<T>(val: &T) -> Json
+impl<T> From<Json<T>> for LieResponse
 where
     T: serde::Serialize,
 {
-    Json {
-        inner: serde_json::to_vec(val),
-    }
-}
-
-impl From<Json> for LieResponse {
-    fn from(val: Json) -> LieResponse {
-        let resp: Result<LieResponse, crate::Error> = val
-            .inner
-            .map(|j| {
-                http::Response::builder()
-                    .header(
-                        hyper::header::CONTENT_TYPE,
-                        mime::APPLICATION_JSON.to_string(),
-                    )
-                    .body(hyper::Body::from(j))
-                    .unwrap()
-                    .into()
+    fn from(json: Json<T>) -> LieResponse {
+        serde_json::to_vec(&json.body)
+            .map(|b| {
+                LieResponse::from(
+                    http::Response::builder()
+                        .header(
+                            hyper::header::CONTENT_TYPE,
+                            mime::APPLICATION_JSON.to_string(),
+                        )
+                        .body(hyper::Body::from(b))
+                        .unwrap(),
+                )
             })
             .map_err(|e| {
                 tracing::error!("json serialize failed, {:?}", e);
-                e.into()
-            });
-
-        resp.into()
+                crate::Error::from(e)
+            })
+            .into()
     }
 }
 
-pub struct WithStream<S> {
-    s: S,
-    content_type: mime::Mime,
-}
+impl From<BytesBody> for LieResponse {
+    fn from(body: BytesBody) -> Self {
+        let BytesBody { body, content_type } = body;
 
-impl<S, B, E> WithStream<S>
-where
-    S: Stream<Item = Result<B, E>> + Send + 'static,
-    B: Into<Bytes> + 'static,
-    E: std::error::Error + Send + Sync + 'static,
-{
-    pub fn new(s: S, content_type: mime::Mime) -> Self {
-        WithStream { s, content_type }
+        http::Response::builder()
+            .header(hyper::header::CONTENT_TYPE, content_type.to_string())
+            .body(hyper::Body::from(body))
+            .unwrap()
+            .into()
     }
 }
 
-impl<S, B, E> From<WithStream<S>> for LieResponse
+impl<S, B, E> From<StreamBody<S>> for LieResponse
 where
-    S: Stream<Item = Result<B, E>> + Send + 'static,
+    S: futures::Stream<Item = Result<B, E>> + Send + 'static,
     B: Into<Bytes> + 'static,
     E: std::error::Error + Send + Sync + 'static,
 {
-    fn from(val: WithStream<S>) -> LieResponse {
-        let WithStream { s, content_type } = val;
+    fn from(body: StreamBody<S>) -> LieResponse {
+        let StreamBody { s, content_type } = body;
 
         http::Response::builder()
             .header(hyper::header::CONTENT_TYPE, content_type.to_string())
