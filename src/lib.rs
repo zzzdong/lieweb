@@ -10,6 +10,7 @@ mod server;
 mod tls;
 mod utils;
 
+pub use endpoint::{Endpoint, Handler, IntoEndpoint};
 pub use error::Error;
 pub use extracts::{AppState, PathParam, Query, RemoteAddr};
 pub use request::{LieRequest, Request};

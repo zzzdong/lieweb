@@ -369,43 +369,52 @@ impl IntoResponse for (StatusCode, &'static str) {
     }
 }
 
+impl IntoResponse for crate::Error {
+    fn into_response(self) -> Response {
+        tracing::error!("on IntoResponse for lieweb::Error, error: {:?}", self);
+
+        http::Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body(hyper::Body::from("Internal Server Error"))
+            .unwrap()
+    }
+}
+
+impl From<crate::Error> for LieResponse {
+    fn from(e: crate::Error) -> Self {
+        tracing::error!("on From<lieweb::Error> for LieResponse, error: {:?}", e);
+
+        http::Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body(hyper::Body::from("Internal Server Error"))
+            .unwrap()
+            .into()
+    }
+}
+
+
 impl<E, R> From<Result<R, E>> for LieResponse
 where
     R: Into<LieResponse>,
-    E: std::error::Error + 'static + Send + Sync,
+    E: Into<LieResponse>,
 {
     fn from(val: Result<R, E>) -> Self {
         match val {
             Ok(r) => r.into(),
-            Err(e) => {
-                tracing::error!("on Result<R, E>, error: {:?}", e);
-
-                http::Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .body(hyper::Body::from("Internal Server Error"))
-                    .unwrap()
-                    .into()
-            }
+            Err(e) => e.into(),
         }
     }
 }
 
 impl<E, R> IntoResponse for Result<R, E>
 where
-    R: Into<LieResponse>,
-    E: std::error::Error + 'static + Send + Sync,
+    R: IntoResponse,
+    E: IntoResponse,
 {
     fn into_response(self) -> Response {
         match self {
-            Ok(r) => r.into().into_response(),
-            Err(e) => {
-                tracing::error!("on Result<R, E>, error: {:?}", e);
-
-                http::Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .body(hyper::Body::from("Internal Server Error"))
-                    .unwrap()
-            }
+            Ok(r) => r.into_response(),
+            Err(e) => e.into_response(),
         }
     }
 }
@@ -454,7 +463,7 @@ where
 
 impl From<Json> for LieResponse {
     fn from(val: Json) -> LieResponse {
-        let resp: Result<LieResponse, _> = val
+        let resp: Result<LieResponse, crate::Error> = val
             .inner
             .map(|j| {
                 http::Response::builder()
@@ -468,7 +477,7 @@ impl From<Json> for LieResponse {
             })
             .map_err(|e| {
                 tracing::error!("json serialize failed, {:?}", e);
-                e
+                e.into()
             });
 
         resp.into()
