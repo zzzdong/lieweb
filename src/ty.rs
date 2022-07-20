@@ -1,35 +1,49 @@
 use bytes::Bytes;
+use hyper::Body;
 
 pub struct Form<T> {
-    pub(crate) body: T,
+    pub(crate) value: T,
 }
 
 impl<T> Form<T> {
-    pub fn new(body: T) -> Self {
-        Form { body }
+    pub fn new(value: T) -> Self {
+        Form { value }
+    }
+
+    pub fn value(&self) -> &T {
+        &self.value
+    }
+
+    pub fn take(self) -> T {
+        self.value
     }
 }
 
-pub struct Html<T> {
-    pub(crate) body: T,
+pub struct Html {
+    pub(crate) body: Body,
 }
 
-impl<T> Html<T>
-where
-    T: Send,
-{
-    pub fn new(body: T) -> Self {
-        Html { body }
+impl Html {
+    pub fn new(body: impl Into<Body>) -> Self {
+        Html { body: body.into() }
     }
 }
 
 pub struct Json<T> {
-    pub(crate) body: T,
+    pub(crate) value: T,
 }
 
 impl<T> Json<T> {
-    pub fn new(body: T) -> Self {
-        Json { body }
+    pub fn new(value: T) -> Self {
+        Json { value }
+    }
+
+    pub fn value(&self) -> &T {
+        &self.value
+    }
+
+    pub fn take(self) -> T {
+        self.value
     }
 }
 
@@ -60,5 +74,13 @@ impl BytesBody {
             body: body.into(),
             content_type,
         }
+    }
+
+    pub fn value(&self) -> &Bytes {
+        &self.body
+    }
+
+    pub fn take(self) -> Bytes {
+        self.body
     }
 }

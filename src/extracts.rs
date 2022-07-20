@@ -5,14 +5,16 @@ use std::{
 };
 
 use bytes::{Buf, Bytes, BytesMut};
+use headers::HeaderMapExt;
 use hyper::{body::HttpBody, Body, StatusCode};
+use mime::Mime;
 use serde::de::DeserializeOwned;
 
 use crate::{
     middleware::WithState,
     request::{FromRequest, RequestCtx, RequestParts},
     response::IntoResponse,
-    Json, LieResponse, Response,
+    BytesBody, Form, Json, LieResponse, Response,
 };
 
 pub struct ParamsRejection(params_de::Error);
@@ -21,7 +23,7 @@ impl IntoResponse for ParamsRejection {
     fn into_response(self) -> Response {
         LieResponse::new(
             StatusCode::BAD_REQUEST,
-            "Path param parse error".to_string(),
+            "path param parse error".to_string(),
         )
         .into()
     }
@@ -228,7 +230,7 @@ impl IntoResponse for ReadBodyRejection {
         match self {
             ReadBodyRejection::BodyBeenTaken(e) => e.into_response(),
             ReadBodyRejection::ReadFailed(e) => {
-                tracing::error!("ReadBodyRejection failed {:?}", self);
+                tracing::error!("ReadBodyRejection failed {:?}", e);
                 LieResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "Read body failed").into()
             }
         }
@@ -257,9 +259,58 @@ where
 }
 
 #[derive(thiserror::Error, Debug)]
+pub enum FormRejection {
+    #[error("read body failed")]
+    ReadBody(ReadBodyRejection),
+    #[error("unexecpted content type")]
+    UnexpectedContentType(Mime),
+    #[error("decode form error")]
+    DecodeFailed(#[from] serde_urlencoded::de::Error),
+}
+
+impl IntoResponse for FormRejection {
+    fn into_response(self) -> Response {
+        match self {
+            FormRejection::ReadBody(e) => e.into_response(),
+            FormRejection::UnexpectedContentType(t) => {
+                tracing::error!("FormRejection::UnexpectedContentType: {:?}", t);
+                LieResponse::with_status(StatusCode::BAD_REQUEST).into()
+            }
+            FormRejection::DecodeFailed(e) => {
+                tracing::error!("FormRejection::DecodeFailed: {:?}", e);
+                LieResponse::with_status(StatusCode::BAD_REQUEST).into()
+            }
+        }
+    }
+}
+
+#[crate::async_trait]
+impl<T> FromRequest for Form<T>
+where
+    T: serde::de::DeserializeOwned,
+{
+    type Rejection = FormRejection;
+
+    async fn from_request(req: &mut RequestParts) -> Result<Self, Self::Rejection> {
+        let content_type = get_content_type(req);
+        if content_type.subtype() != mime::WWW_FORM_URLENCODED {
+            return Err(FormRejection::UnexpectedContentType(content_type));
+        }
+
+        let body = read_body(req).await.map_err(FormRejection::ReadBody)?;
+
+        let value: T = serde_urlencoded::from_bytes(&body)?;
+
+        Ok(Form::new(value))
+    }
+}
+
+#[derive(thiserror::Error, Debug)]
 pub enum JsonRejection {
     #[error("read body failed")]
     ReadBody(ReadBodyRejection),
+    #[error("unexecpted content type")]
+    UnexpectedContentType(Mime),
     #[error("decode json error")]
     DecodeFailed(#[from] serde_json::Error),
 }
@@ -268,6 +319,10 @@ impl IntoResponse for JsonRejection {
     fn into_response(self) -> Response {
         match self {
             JsonRejection::ReadBody(e) => e.into_response(),
+            JsonRejection::UnexpectedContentType(t) => {
+                tracing::error!("JsonRejection::UnexpectedContentType: {:?}", t);
+                LieResponse::with_status(StatusCode::BAD_REQUEST).into()
+            }
             JsonRejection::DecodeFailed(e) => {
                 tracing::error!("JsonRejection::DecodeFailed: {:?}", e);
                 LieResponse::with_status(StatusCode::BAD_REQUEST).into()
@@ -284,6 +339,11 @@ where
     type Rejection = JsonRejection;
 
     async fn from_request(req: &mut RequestParts) -> Result<Self, Self::Rejection> {
+        let content_type = get_content_type(req);
+        if content_type.subtype() != mime::JSON {
+            return Err(JsonRejection::UnexpectedContentType(content_type));
+        }
+
         let body = read_body(req).await.map_err(JsonRejection::ReadBody)?;
 
         let value: T = serde_json::from_slice(&body)?;
@@ -292,11 +352,47 @@ where
     }
 }
 
+#[crate::async_trait]
+impl FromRequest for BytesBody {
+    type Rejection = ReadBodyRejection;
+
+    async fn from_request(req: &mut RequestParts) -> Result<Self, Self::Rejection> {
+        let content_type = get_content_type(req);
+        let body = read_body(req).await?;
+
+        Ok(BytesBody::new(body, content_type))
+    }
+}
+
+#[crate::async_trait]
+impl FromRequest for Body {
+    type Rejection = BodyBeenTaken;
+
+    async fn from_request(req: &mut RequestParts) -> Result<Self, Self::Rejection> {
+        let empty = hyper::Request::default();
+        let req = std::mem::replace(req, empty);
+
+        let (_parts, body) = req.into_parts();
+
+        match body {
+            Some(body) => Ok(body),
+            None => Err(BodyBeenTaken),
+        }
+    }
+}
+
+fn get_content_type(req: &mut RequestParts) -> mime::Mime {
+    req.headers()
+        .typed_get::<headers::ContentType>()
+        .map(Into::into)
+        .unwrap_or(mime::APPLICATION_OCTET_STREAM)
+}
+
 async fn read_body(req: &mut RequestParts) -> Result<Bytes, ReadBodyRejection> {
     let mut body = req
         .body_mut()
         .take()
-        .ok_or_else(|| ReadBodyRejection::BodyBeenTaken(BodyBeenTaken))?;
+        .ok_or(ReadBodyRejection::BodyBeenTaken(BodyBeenTaken))?;
 
     let mut bufs = BytesMut::new();
 

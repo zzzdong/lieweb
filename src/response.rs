@@ -424,7 +424,7 @@ where
     T: serde::Serialize,
 {
     fn from(form: Form<T>) -> LieResponse {
-        serde_urlencoded::to_string(&form.body)
+        serde_urlencoded::to_string(&form.value)
             .map(|b| {
                 LieResponse::from(
                     http::Response::builder()
@@ -444,18 +444,14 @@ where
     }
 }
 
-impl<T> From<Html<T>> for LieResponse
-where
-    hyper::Body: From<T>,
-    T: Send,
-{
-    fn from(val: Html<T>) -> LieResponse {
+impl From<Html> for LieResponse {
+    fn from(val: Html) -> LieResponse {
         http::Response::builder()
             .header(
                 hyper::header::CONTENT_TYPE,
                 mime::TEXT_HTML_UTF_8.to_string(),
             )
-            .body(hyper::Body::from(val.body))
+            .body(val.body)
             .unwrap()
             .into()
     }
@@ -466,7 +462,7 @@ where
     T: serde::Serialize,
 {
     fn from(json: Json<T>) -> LieResponse {
-        serde_json::to_vec(&json.body)
+        serde_json::to_vec(&json.value)
             .map(|b| {
                 LieResponse::from(
                     http::Response::builder()

@@ -1,6 +1,6 @@
 mod endpoint;
 mod error;
-mod extracts;
+pub mod extracts;
 pub mod middleware;
 pub mod request;
 pub mod response;
