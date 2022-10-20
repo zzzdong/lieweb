@@ -10,7 +10,7 @@ NOTE: `lieweb` currently under early development, you should NOT use it in produ
 
 ## Overview
 
-[`lieweb`] is a simple async web framework in Rust-lang.
+[`lieweb`] is a simple async web library in Rust-lang.
 
 ## Getting Started
 

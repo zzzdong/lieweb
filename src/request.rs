@@ -4,7 +4,7 @@ use bytes::{Buf, Bytes, BytesMut};
 use headers::{Header, HeaderMapExt, HeaderName, HeaderValue};
 use hyper::body::HttpBody;
 use hyper::http;
-use route_recognizer::Params;
+use pathrouter::Params;
 use serde::de::DeserializeOwned;
 
 pub type Request = hyper::Request<hyper::Body>;

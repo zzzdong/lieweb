@@ -51,8 +51,7 @@ where
     async fn call(&self, req: Request) -> Response {
         let handler = self.handler.clone();
 
-        let resp = Handler::call(handler, req).await;
-        resp
+        Handler::call(handler, req).await
     }
 }
 

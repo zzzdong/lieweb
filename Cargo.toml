@@ -29,8 +29,8 @@ hyper = { version="0.14", features=["server", "http1", "http2", "stream"] }
 lazy_static = "1.4"
 mime = "0.3"
 mime_guess = "2.0"
+pathrouter = { git = "https://github.com/zzzdong/pathrouter" }
 rand = "0.8"
-route-recognizer = "0.3"
 serde = "1.0"
 serde_json = "1.0"
 serde_urlencoded = "0.7"
@@ -48,7 +48,3 @@ serde = { version="1.0", features=["derive"] }
 [[example]]
 name = "tls"
 required-features = ["tls"]
-
-
-[patch.crates-io]
-route-recognizer = {git="https://github.com/zzzdong/route-recognizer.git", branch="add-at_or_default"}
