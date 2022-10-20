@@ -15,19 +15,14 @@ type MethodRoute = HashMap<http::Method, Box<DynEndpoint>>;
 
 const LIEWEB_NESTED_ROUTER: &str = "--lieweb-nested-router";
 
-lazy_static::lazy_static! {
-    pub static ref METHOD_ANY: http::Method = http::Method::from_bytes(b"__ANY__").unwrap();
-}
-
 enum Route {
     Method(MethodRoute),
     Sub(RouterEndpoint),
-    Empty,
 }
 
 impl Default for Route {
     fn default() -> Self {
-        Route::Empty
+        Route::Method(HashMap::new())
     }
 }
 
@@ -97,11 +92,6 @@ impl Router {
         match route {
             Route::Method(m) => {
                 m.insert(method, handler);
-            }
-            Route::Empty => {
-                let mut map: MethodRoute = HashMap::new();
-                map.insert(method, handler);
-                *route = Route::Method(map);
             }
             _ => unreachable!(),
         }
@@ -177,11 +167,7 @@ impl Router {
                 Route::Sub(sub) => Selection {
                     endpoint: sub,
                     params,
-                },
-                Route::Empty => Selection {
-                    endpoint: &*self.handle_not_found,
-                    params: Params::new(),
-                },
+                }
             },
             None => Selection {
                 endpoint: &*self.handle_not_found,
