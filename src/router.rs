@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use hyper::http;
-use route_recognizer::{Params, Router as PathRouter};
+use pathrouter::{Params, Router as PathRouter};
 
 use crate::endpoint::{DynEndpoint, Handler, RouterEndpoint};
 use crate::middleware::{Middleware, Next};
@@ -19,16 +19,12 @@ lazy_static::lazy_static! {
     pub static ref METHOD_ANY: http::Method = http::Method::from_bytes(b"__ANY__").unwrap();
 }
 
+#[derive(Default)]
 enum Route {
     Method(MethodRoute),
     Sub(RouterEndpoint),
+    #[default]
     Empty,
-}
-
-impl Default for Route {
-    fn default() -> Self {
-        Route::Empty
-    }
 }
 
 /// The result of routing a URL
@@ -153,13 +149,13 @@ impl Router {
     }
 
     pub(crate) fn find(&self, path: &str, method: http::Method) -> Selection {
-        match self.path_router.recognize(path) {
-            Ok(m) => match m.handler() {
+        match self.path_router.route(path) {
+            Some((route, params)) => match route {
                 Route::Method(map) => {
                     if let Some(ep) = map.get(&method) {
                         return Selection {
                             endpoint: &**ep,
-                            params: m.params().clone(),
+                            params,
                         };
                     }
                     if map.is_empty() {
@@ -176,14 +172,14 @@ impl Router {
                 }
                 Route::Sub(sub) => Selection {
                     endpoint: sub,
-                    params: m.params().clone(),
+                    params,
                 },
                 Route::Empty => Selection {
                     endpoint: &*self.handle_not_found,
                     params: Params::new(),
                 },
             },
-            Err(_e) => Selection {
+            None => Selection {
                 endpoint: &*self.handle_not_found,
                 params: Params::new(),
             },

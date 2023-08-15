@@ -10,7 +10,7 @@ pub struct AccessLog;
 
 impl AccessLog {
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 
     async fn log_basic<'a>(&'a self, ctx: Request, next: Next<'a>) -> Response {

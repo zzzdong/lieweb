@@ -37,7 +37,7 @@ impl<T> PathParam<T>
 where
     T: DeserializeOwned,
 {
-    pub(crate) fn from_params(params: &route_recognizer::Params) -> Result<Self, ParamsRejection> {
+    pub(crate) fn from_params(params: &pathrouter::Params) -> Result<Self, ParamsRejection> {
         params_de::from_params::<T>(params)
             .map(|value| PathParam { value })
             .map_err(ParamsRejection)
@@ -60,7 +60,7 @@ where
     type Rejection = ParamsRejection;
 
     async fn from_request(req: &mut RequestParts) -> Result<Self, Self::Rejection> {
-        let empty = route_recognizer::Params::new();
+        let empty = pathrouter::Params::new();
         let params = RequestCtx::extract_params(req).unwrap_or(&empty);
 
         PathParam::from_params(params)
@@ -440,16 +440,16 @@ mod params_de {
     impl std::error::Error for Error {}
 
     struct PathParamsDeserialzer<'de> {
-        inner: &'de mut route_recognizer::Iter<'de>,
+        inner: &'de mut pathrouter::ParamIter<'de>,
     }
 
     impl<'de> PathParamsDeserialzer<'de> {
-        pub fn from_params(inner: &'de mut route_recognizer::Iter<'de>) -> Self {
+        pub fn from_params(inner: &'de mut pathrouter::ParamIter<'de>) -> Self {
             PathParamsDeserialzer { inner }
         }
     }
 
-    pub fn from_params<T>(params: &route_recognizer::Params) -> Result<T, Error>
+    pub fn from_params<T>(params: &pathrouter::Params) -> Result<T, Error>
     where
         T: DeserializeOwned,
     {
@@ -480,7 +480,7 @@ mod params_de {
             V: serde::de::Visitor<'de>,
         {
             struct Access<'de, 'a> {
-                iter: &'a mut route_recognizer::Iter<'de>,
+                iter: &'a mut pathrouter::ParamIter<'de>,
                 entry: Option<(&'de str, &'de str)>,
             }
 
@@ -637,10 +637,10 @@ mod params_de {
 
         #[test]
         fn test() {
-            let mut params = route_recognizer::Params::new();
-            params.insert("version".into(), "v2".into());
-            params.insert("id".into(), "123".into());
-            params.insert("flag".into(), "false".into());
+            let mut params = pathrouter::Params::new();
+            params.insert("version", "v2");
+            params.insert("id", "123");
+            params.insert("flag", "false");
 
             #[derive(Debug, serde::Deserialize)]
             #[serde(rename_all = "camelCase")]

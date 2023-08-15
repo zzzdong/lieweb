@@ -106,7 +106,7 @@ impl App {
             let server = server.clone();
             let router = router.clone();
 
-            tokio::spawn(async move {
+            tokio::task::spawn(async move {
                 let router = router.clone();
 
                 let ret = server.serve_connection(
@@ -153,7 +153,7 @@ impl App {
             let server = server.clone();
             let router = router.clone();
 
-            tokio::spawn(async move {
+            tokio::task::spawn(async move {
                 let tls_acceptor = tls_acceptor.clone();
                 let router = router.clone();
 
