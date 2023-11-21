@@ -12,6 +12,10 @@ pub enum Error {
     FormDecodeError(#[from] serde_urlencoded::de::Error),
     #[error("serde_urlencoded decode error")]
     FormEncodeError(#[from] serde_urlencoded::ser::Error),
+    #[error("infallible")]
+    Infallible(#[from] std::convert::Infallible),
+    #[error("mime error")]
+    Mime(#[from] mime::FromStrError),
     #[error("lieweb error")]
     Message(String),
     #[error("invalid request header {name:?}")]

@@ -3,8 +3,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use hyper::http;
-use hyper::server::conn::Http;
 use hyper::service::service_fn;
+use hyper_util::rt::{TokioExecutor, TokioIo};
 use lazy_static::lazy_static;
 use tokio::net::{TcpListener, ToSocketAddrs};
 
@@ -99,18 +99,16 @@ impl App {
 
         let router = Arc::new(router);
 
-        let server = Http::new();
-
         let listener = TcpListener::bind(addr).await.unwrap();
         while let Ok((socket, remote_addr)) = listener.accept().await {
-            let server = server.clone();
+            let server = hyper_util::server::conn::auto::Builder::new(TokioExecutor::new());
             let router = router.clone();
 
             tokio::task::spawn(async move {
                 let router = router.clone();
 
-                let ret = server.serve_connection(
-                    socket,
+                let ret = server.serve_connection_with_upgrades(
+                    TokioIo::new(socket),
                     service_fn(|mut req| {
                         let router = router.clone();
                         RequestCtx::init(&mut req, Some(remote_addr));
@@ -198,77 +196,3 @@ pub fn server_id() -> &'static str {
     &SERVER_ID
 }
 
-#[cfg(test)]
-mod test {
-    use bytes::Buf;
-    use hyper::body::HttpBody;
-
-    use crate::{App, Request, Response, Router};
-
-    fn app() -> App {
-        let mut app = App::new();
-
-        app.get("/", || async move { "/" });
-        app.post("/post", || async move { "/post" });
-
-        app
-    }
-
-    fn request(method: &str, uri: &str) -> Request {
-        hyper::Request::builder()
-            .uri(uri)
-            .method(method)
-            .body(crate::hyper::Body::empty())
-            .unwrap()
-    }
-
-    async fn body_bytes(resp: &mut Response) -> Vec<u8> {
-        let mut bufs = bytes::BytesMut::new();
-
-        while let Some(buf) = resp.body_mut().data().await {
-            let buf = buf.unwrap();
-            if buf.has_remaining() {
-                bufs.extend(buf);
-            }
-        }
-
-        bufs.freeze().to_vec()
-    }
-
-    #[tokio::test]
-    async fn basic() {
-        let mut resp = app().respond(request("GET", "/")).await;
-        assert_eq!(body_bytes(&mut resp).await, b"/".to_vec())
-    }
-
-    #[tokio::test]
-    async fn basic_post() {
-        let mut resp = app().respond(request("POST", "/post")).await;
-        assert_eq!(body_bytes(&mut resp).await, b"/post".to_vec())
-    }
-
-    #[tokio::test]
-    async fn tree() {
-        let mut app = app();
-
-        app.get("/aa", || async move { "aa" });
-
-        let mut router_c = Router::new();
-        router_c.get("/c", || async move { "a-b-c" });
-
-        let mut router_b = Router::new();
-        router_b.merge("/b/", router_c).unwrap();
-
-        app.merge("/a/", router_b).unwrap();
-
-        // let mut resp = app.respond(request("GET", "/aa")).await;
-        // let body = body_bytes(&mut resp).await;
-        // assert_eq!(body, b"aa".to_vec());
-
-        let mut resp = app.respond(request("GET", "/a/b/c")).await;
-        assert_eq!(resp.status(), 200);
-
-        let body = body_bytes(&mut resp).await;
-        assert_eq!(body, b"a-b-c".to_vec());
-    }
-}

@@ -1,13 +1,14 @@
 use std::net::SocketAddr;
 
-use bytes::{Buf, Bytes, BytesMut};
-use headers::{Header, HeaderMapExt, HeaderName, HeaderValue};
-use hyper::body::HttpBody;
+use bytes::Bytes;
+use cookie::Cookie;
+use http_body_util::BodyExt;
 use hyper::http;
+use hyper::http::{HeaderName, HeaderValue};
 use pathrouter::Params;
 use serde::de::DeserializeOwned;
 
-pub type Request = hyper::Request<hyper::Body>;
+pub type Request = hyper::Request<hyper::body::Incoming>;
 
 use crate::error::{invalid_header, invalid_param, missing_cookie, missing_header, missing_param};
 use crate::response::IntoResponse;
@@ -20,7 +21,7 @@ pub trait FromRequest: Sized {
     async fn from_request(req: &mut RequestParts) -> Result<Self, Self::Rejection>;
 }
 
-pub type RequestParts = hyper::Request<Option<hyper::Body>>;
+pub type RequestParts = hyper::Request<Option<hyper::body::Incoming>>;
 
 #[crate::async_trait]
 pub trait LieRequest {
@@ -34,7 +35,7 @@ pub trait LieRequest {
     fn get_header<K>(&self, header: K) -> Result<&HeaderValue, Error>
     where
         HeaderName: From<K>;
-    fn get_typed_header<T: Header + Send + 'static>(&self) -> Result<T, Error>;
+    // fn get_typed_header<T: Header + Send + 'static>(&self) -> Result<T, Error>;
 
     async fn read_body(&mut self) -> Result<Bytes, Error>;
     async fn read_form<T: DeserializeOwned>(&mut self) -> Result<T, Error>;
@@ -85,32 +86,26 @@ impl LieRequest for Request {
         Ok(value)
     }
 
-    fn get_typed_header<T: Header + Send + 'static>(&self) -> Result<T, Error> {
-        self.headers()
-            .typed_get::<T>()
-            .ok_or_else(|| invalid_header(T::name().as_str()))
-    }
+    // fn get_typed_header<T: Header + Send + 'static>(&self) -> Result<T, Error> {
+    //     self.headers()
+    //         .typed_get::<T>()
+    //         .ok_or_else(|| invalid_header(T::name().as_str()))
+    // }
 
     fn get_cookie(&self, name: &str) -> Result<String, Error> {
-        let cookie: headers::Cookie = self.get_typed_header()?;
+        let cookie = self.get_header(hyper::header::COOKIE)?;
+        let cookie = String::from_utf8_lossy(cookie.as_bytes());
 
-        cookie
-            .get(name)
-            .ok_or_else(|| missing_cookie(name))
-            .map(|s| s.to_string())
+        Cookie::split_parse(cookie)
+            .flatten()
+            .find(|item| item.name() == name)
+            .map(|item| item.to_string())
+            .ok_or(missing_cookie(name))
     }
 
     async fn read_body(&mut self) -> Result<Bytes, Error> {
-        let mut bufs = BytesMut::new();
-
-        while let Some(buf) = self.body_mut().data().await {
-            let buf = buf?;
-            if buf.has_remaining() {
-                bufs.extend(buf);
-            }
-        }
-
-        Ok(bufs.freeze())
+        let body = BodyExt::collect(self.body_mut()).await?;
+        Ok(body.to_bytes())
     }
 
     async fn read_form<T: DeserializeOwned>(&mut self) -> Result<T, Error> {
