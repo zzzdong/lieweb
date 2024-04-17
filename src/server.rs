@@ -195,4 +195,3 @@ impl Default for App {
 pub fn server_id() -> &'static str {
     &SERVER_ID
 }
-

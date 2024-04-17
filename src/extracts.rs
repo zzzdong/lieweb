@@ -23,7 +23,7 @@ impl IntoResponse for ParamsRejection {
     fn into_response(self) -> Response {
         LieResponse::new(
             StatusCode::BAD_REQUEST,
-            "path param parse error".to_string(),
+            format!("path param parse error, {}", self.0),
         )
         .into()
     }

@@ -1,5 +1,3 @@
-use std::convert::TryFrom;
-
 use crate::http::{
     self,
     header::{HeaderMap, HeaderName, HeaderValue},

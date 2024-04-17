@@ -25,7 +25,9 @@ pub struct Html {
 
 impl Html {
     pub fn new(body: impl Into<Bytes>) -> Self {
-        Html { body: Full::new(body.into()) }
+        Html {
+            body: Full::new(body.into()),
+        }
     }
 }
 

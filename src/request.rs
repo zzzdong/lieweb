@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 
 use bytes::Bytes;
 use cookie::Cookie;
+use headers::{Header, HeaderMapExt};
 use http_body_util::BodyExt;
 use hyper::http;
 use hyper::http::{HeaderName, HeaderValue};
@@ -35,7 +36,7 @@ pub trait LieRequest {
     fn get_header<K>(&self, header: K) -> Result<&HeaderValue, Error>
     where
         HeaderName: From<K>;
-    // fn get_typed_header<T: Header + Send + 'static>(&self) -> Result<T, Error>;
+    fn get_typed_header<T: Header + Send + 'static>(&self) -> Result<T, Error>;
 
     async fn read_body(&mut self) -> Result<Bytes, Error>;
     async fn read_form<T: DeserializeOwned>(&mut self) -> Result<T, Error>;
@@ -86,11 +87,11 @@ impl LieRequest for Request {
         Ok(value)
     }
 
-    // fn get_typed_header<T: Header + Send + 'static>(&self) -> Result<T, Error> {
-    //     self.headers()
-    //         .typed_get::<T>()
-    //         .ok_or_else(|| invalid_header(T::name().as_str()))
-    // }
+    fn get_typed_header<T: Header + Send + 'static>(&self) -> Result<T, Error> {
+        self.headers()
+            .typed_get::<T>()
+            .ok_or_else(|| invalid_header(T::name().as_str()))
+    }
 
     fn get_cookie(&self, name: &str) -> Result<String, Error> {
         let cookie = self.get_header(hyper::header::COOKIE)?;
