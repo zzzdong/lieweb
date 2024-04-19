@@ -1,6 +1,6 @@
 [package]
 name = "lieweb"
-version = "0.2.0-beta.2"
+version = "0.2.0"
 authors = ["zzzdong <kuwater@163.com>"]
 edition = "2021"
 license = "MIT"
