@@ -4,9 +4,9 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use bytes::{Buf, Bytes, BytesMut};
-use headers::HeaderMapExt;
-use hyper::{body::HttpBody, Body, StatusCode};
+use bytes::Bytes;
+use http_body_util::BodyExt;
+use hyper::StatusCode;
 use mime::Mime;
 use serde::de::DeserializeOwned;
 
@@ -23,7 +23,7 @@ impl IntoResponse for ParamsRejection {
     fn into_response(self) -> Response {
         LieResponse::new(
             StatusCode::BAD_REQUEST,
-            "path param parse error".to_string(),
+            format!("path param parse error, {}", self.0),
         )
         .into()
     }
@@ -365,7 +365,7 @@ impl FromRequest for BytesBody {
 }
 
 #[crate::async_trait]
-impl FromRequest for Body {
+impl FromRequest for hyper::body::Incoming {
     type Rejection = BodyBeenTaken;
 
     async fn from_request(req: &mut RequestParts) -> Result<Self, Self::Rejection> {
@@ -383,27 +383,26 @@ impl FromRequest for Body {
 
 fn get_content_type(req: &mut RequestParts) -> mime::Mime {
     req.headers()
-        .typed_get::<headers::ContentType>()
-        .map(Into::into)
+        .get(hyper::header::CONTENT_TYPE)
+        .and_then(|v| {
+            String::from_utf8_lossy(v.as_bytes())
+                .parse::<mime::Mime>()
+                .ok()
+        })
         .unwrap_or(mime::APPLICATION_OCTET_STREAM)
 }
 
 async fn read_body(req: &mut RequestParts) -> Result<Bytes, ReadBodyRejection> {
-    let mut body = req
+    let body = req
         .body_mut()
         .take()
         .ok_or(ReadBodyRejection::BodyBeenTaken(BodyBeenTaken))?;
 
-    let mut bufs = BytesMut::new();
+    let body = BodyExt::collect(body)
+        .await
+        .map_err(ReadBodyRejection::ReadFailed)?;
 
-    while let Some(buf) = body.data().await {
-        let buf = buf.map_err(ReadBodyRejection::ReadFailed)?;
-        if buf.has_remaining() {
-            bufs.extend(buf);
-        }
-    }
-
-    Ok(bufs.freeze())
+    Ok(body.to_bytes())
 }
 
 mod params_de {
@@ -649,6 +648,7 @@ mod params_de {
                 V2,
             }
 
+            #[allow(dead_code)]
             #[derive(Debug, serde::Deserialize)]
             struct PathParams {
                 version: Version,

@@ -1,8 +1,11 @@
-use std::convert::TryFrom;
 use std::{borrow::Cow, convert::Infallible};
 
 use bytes::Bytes;
 
+use futures_util::StreamExt;
+use http_body_util::combinators::BoxBody;
+use http_body_util::{BodyExt, Empty, Full};
+use hyper::body::Frame;
 use hyper::http::{
     self,
     header::{HeaderMap, HeaderName, HeaderValue},
@@ -10,8 +13,9 @@ use hyper::http::{
 };
 
 use crate::ty::{BytesBody, Form, Html, Json, StreamBody};
+use crate::Error;
 
-pub type Response = http::Response<hyper::Body>;
+pub type Response = http::Response<BoxBody<Bytes, Error>>;
 
 pub trait IntoResponse {
     fn into_response(self) -> Response;
@@ -35,11 +39,11 @@ pub struct LieResponse {
 }
 
 impl LieResponse {
-    pub fn new(status: StatusCode, body: impl Into<hyper::Body>) -> Self {
+    pub fn new(status: StatusCode, body: impl Into<Bytes>) -> Self {
         LieResponse {
             inner: http::Response::builder()
                 .status(status)
-                .body(body.into())
+                .body(Full::new(body.into()).map_err(Into::into).boxed())
                 .unwrap(),
         }
     }
@@ -49,11 +53,7 @@ impl LieResponse {
         resp.set_status(status)
     }
 
-    pub fn with_html<T>(body: T) -> Self
-    where
-        hyper::Body: From<T>,
-        T: Send,
-    {
+    pub fn with_html(body: impl Into<Bytes>) -> Self {
         Html::new(body).into()
     }
 
@@ -82,9 +82,9 @@ impl LieResponse {
 
     pub fn with_stream<S, B, E>(s: S, content_type: mime::Mime) -> Self
     where
-        S: futures::Stream<Item = Result<B, E>> + Send + 'static,
+        S: futures::Stream<Item = Result<B, E>> + Send + Sync + 'static,
         B: Into<Bytes> + 'static,
-        E: std::error::Error + Send + Sync + 'static,
+        E: Into<Error> + Send + Sync + 'static,
     {
         StreamBody::new(s, content_type).into()
     }
@@ -184,22 +184,22 @@ impl LieResponse {
         self.append_header(http::header::SET_COOKIE, cookie.to_string())
     }
 
-    pub async fn body_bytes(&mut self) -> Result<Vec<u8>, crate::Error> {
-        use bytes::Buf;
-        use bytes::BytesMut;
-        use hyper::body::HttpBody;
+    // pub async fn body_bytes(&mut self) -> Result<Vec<u8>, crate::Error> {
+    //     use bytes::Buf;
+    //     use bytes::BytesMut;
+    //     use hyper::body::HttpBody;
 
-        let mut bufs = BytesMut::new();
+    //     let mut bufs = BytesMut::new();
 
-        while let Some(buf) = self.inner.body_mut().data().await {
-            let buf = buf?;
-            if buf.has_remaining() {
-                bufs.extend(buf);
-            }
-        }
+    //     while let Some(buf) = self.inner.body_mut().data().await {
+    //         let buf = buf?;
+    //         if buf.has_remaining() {
+    //             bufs.extend(buf);
+    //         }
+    //     }
 
-        Ok(bufs.freeze().to_vec())
-    }
+    //     Ok(bufs.freeze().to_vec())
+    // }
 }
 
 impl From<Response> for LieResponse {
@@ -234,7 +234,7 @@ impl IntoResponse for StatusCode {
                 hyper::header::CONTENT_TYPE,
                 mime::TEXT_PLAIN_UTF_8.to_string(),
             )
-            .body(hyper::Body::from(format!("{}", self)))
+            .body(Empty::new().map_err(Into::into).boxed())
             .unwrap()
     }
 }
@@ -246,7 +246,11 @@ impl From<&'static [u8]> for LieResponse {
                 hyper::header::CONTENT_TYPE,
                 mime::APPLICATION_OCTET_STREAM.to_string(),
             )
-            .body(hyper::Body::from(val))
+            .body(
+                Full::new(Bytes::from_static(val))
+                    .map_err(Into::into)
+                    .boxed(),
+            )
             .unwrap()
             .into()
     }
@@ -259,7 +263,11 @@ impl IntoResponse for &'static [u8] {
                 hyper::header::CONTENT_TYPE,
                 mime::APPLICATION_OCTET_STREAM.to_string(),
             )
-            .body(hyper::Body::from(self))
+            .body(
+                Full::new(Bytes::from_static(self))
+                    .map_err(Into::into)
+                    .boxed(),
+            )
             .unwrap()
     }
 }
@@ -271,7 +279,7 @@ impl From<Vec<u8>> for LieResponse {
                 hyper::header::CONTENT_TYPE,
                 mime::APPLICATION_OCTET_STREAM.to_string(),
             )
-            .body(hyper::Body::from(val))
+            .body(Full::new(Bytes::from(val)).map_err(Into::into).boxed())
             .unwrap()
             .into()
     }
@@ -284,7 +292,7 @@ impl IntoResponse for Vec<u8> {
                 hyper::header::CONTENT_TYPE,
                 mime::APPLICATION_OCTET_STREAM.to_string(),
             )
-            .body(hyper::Body::from(self))
+            .body(Full::new(Bytes::from(self)).map_err(Into::into).boxed())
             .unwrap()
     }
 }
@@ -296,7 +304,11 @@ impl From<&'static str> for LieResponse {
                 hyper::header::CONTENT_TYPE,
                 mime::TEXT_PLAIN_UTF_8.to_string(),
             )
-            .body(hyper::Body::from(val))
+            .body(
+                Full::new(Bytes::from_static(val.as_bytes()))
+                    .map_err(Into::into)
+                    .boxed(),
+            )
             .unwrap()
             .into()
     }
@@ -309,7 +321,11 @@ impl IntoResponse for &'static str {
                 hyper::header::CONTENT_TYPE,
                 mime::TEXT_PLAIN_UTF_8.to_string(),
             )
-            .body(hyper::Body::from(self))
+            .body(
+                Full::new(Bytes::from_static(self.as_bytes()))
+                    .map_err(Into::into)
+                    .boxed(),
+            )
             .unwrap()
     }
 }
@@ -321,7 +337,7 @@ impl From<String> for LieResponse {
                 hyper::header::CONTENT_TYPE,
                 mime::TEXT_PLAIN_UTF_8.to_string(),
             )
-            .body(hyper::Body::from(val))
+            .body(Full::new(Bytes::from(val)).map_err(Into::into).boxed())
             .unwrap()
             .into()
     }
@@ -334,7 +350,7 @@ impl IntoResponse for String {
                 hyper::header::CONTENT_TYPE,
                 mime::TEXT_PLAIN_UTF_8.to_string(),
             )
-            .body(hyper::Body::from(self))
+            .body(Full::new(Bytes::from(self)).map_err(Into::into).boxed())
             .unwrap()
     }
 }
@@ -365,7 +381,7 @@ impl IntoResponse for (StatusCode, &'static str) {
                 hyper::header::CONTENT_TYPE,
                 mime::TEXT_PLAIN_UTF_8.to_string(),
             )
-            .body(hyper::Body::from(self.1))
+            .body(Full::new(Bytes::from(self.1)).map_err(Into::into).boxed())
             .unwrap()
     }
 }
@@ -376,7 +392,11 @@ impl IntoResponse for crate::Error {
 
         http::Response::builder()
             .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .body(hyper::Body::from("Internal Server Error"))
+            .body(
+                Full::new(Bytes::from("Internal Server Error"))
+                    .map_err(Into::into)
+                    .boxed(),
+            )
             .unwrap()
     }
 }
@@ -387,7 +407,11 @@ impl From<crate::Error> for LieResponse {
 
         http::Response::builder()
             .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .body(hyper::Body::from("Internal Server Error"))
+            .body(
+                Full::new(Bytes::from("Internal Server Error"))
+                    .map_err(Into::into)
+                    .boxed(),
+            )
             .unwrap()
             .into()
     }
@@ -432,7 +456,7 @@ where
                             hyper::header::CONTENT_TYPE,
                             mime::APPLICATION_WWW_FORM_URLENCODED.to_string(),
                         )
-                        .body(hyper::Body::from(b))
+                        .body(Full::new(Bytes::from(b)).map_err(Into::into).boxed())
                         .unwrap(),
                 )
             })
@@ -451,7 +475,7 @@ impl From<Html> for LieResponse {
                 hyper::header::CONTENT_TYPE,
                 mime::TEXT_HTML_UTF_8.to_string(),
             )
-            .body(val.body)
+            .body(val.body.map_err(Into::into).boxed())
             .unwrap()
             .into()
     }
@@ -470,7 +494,7 @@ where
                             hyper::header::CONTENT_TYPE,
                             mime::APPLICATION_JSON.to_string(),
                         )
-                        .body(hyper::Body::from(b))
+                        .body(Full::new(Bytes::from(b)).map_err(Into::into).boxed())
                         .unwrap(),
                 )
             })
@@ -488,7 +512,7 @@ impl From<BytesBody> for LieResponse {
 
         http::Response::builder()
             .header(hyper::header::CONTENT_TYPE, content_type.to_string())
-            .body(hyper::Body::from(body))
+            .body(Full::new(body).map_err(Into::into).boxed())
             .unwrap()
             .into()
     }
@@ -496,17 +520,20 @@ impl From<BytesBody> for LieResponse {
 
 impl<S, B, E> From<StreamBody<S>> for LieResponse
 where
-    S: futures::Stream<Item = Result<B, E>> + Send + 'static,
+    S: futures::Stream<Item = Result<B, E>> + Send + Sync + 'static,
     B: Into<Bytes> + 'static,
-    E: std::error::Error + Send + Sync + 'static,
+    E: Into<Error> + Send + Sync + 'static,
 {
     fn from(body: StreamBody<S>) -> LieResponse {
         let StreamBody { s, content_type } = body;
 
-        http::Response::builder()
+        let body = s.map(|b| b.map(|b| Frame::data(b.into())).map_err(Into::into));
+
+        let resp = http::Response::builder()
             .header(hyper::header::CONTENT_TYPE, content_type.to_string())
-            .body(hyper::Body::wrap_stream(s))
-            .unwrap()
-            .into()
+            .body(BodyExt::boxed(http_body_util::StreamBody::new(body)))
+            .unwrap();
+
+        resp.into()
     }
 }

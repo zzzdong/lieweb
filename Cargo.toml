@@ -15,17 +15,19 @@ categories = ["web-programming::http-server", "network-programming", "asynchrono
 keywords = ["web", "http", "framework", "async"]
 
 [features]
-default = []
-tls = [ "tokio-rustls" ]
+default = [ ]
+tls = [ "tokio-rustls", "rustls-pemfile" ]
 
 [dependencies]
 async-trait = "0.1"
 bytes = "1.0"
-cookie = "0.17"
+cookie = "0.18"
 futures = "0.3"
 futures-util = "0.3"
-headers = "0.3"
-hyper = { version="0.14", features=["server", "http1", "http2", "stream"] }
+headers = "0.4"
+http-body-util = "0.1"
+hyper = { version="1", features=["server", "http1", "http2"] }
+hyper-util = { version = "0.1", features=["tokio", "server-auto"] }
 lazy_static = "1.4"
 mime = "0.3"
 mime_guess = "2.0"
@@ -36,8 +38,9 @@ serde_json = "1.0"
 serde_urlencoded = "0.7"
 thiserror = "1.0"
 tokio = { version="1.0", features=["fs", "net", "rt"] }
-tokio-rustls = { version="0.24", optional=true }
+tokio-rustls = { version="0.26", optional=true }
 tokio-util = { version="0.7", features=["codec"] }
+rustls-pemfile = { version="2.1", optional=true }
 tracing = "0.1"
 
 [dev-dependencies]

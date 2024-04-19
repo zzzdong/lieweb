@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use lieweb::{http, middleware, App, Error, RequestCtx, Response};
+use lieweb::{http, middleware, request::RequestParts, App, AppState, LieResponse, RemoteAddr};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
@@ -16,10 +16,10 @@ struct HelloMessage {
 
 type State = Arc<Mutex<u64>>;
 
-async fn request_handler(req: RequestCtx) -> Response {
+async fn request_handler(addr: RemoteAddr, req: AppState<State>) -> LieResponse {
     let value;
 
-    let state = req.get_state::<State>().unwrap();
+    let state: &State = req.value();
 
     {
         let mut counter = state.lock().await;
@@ -27,24 +27,12 @@ async fn request_handler(req: RequestCtx) -> Response {
         *counter += 1;
     }
 
-    Response::with_html(format!(
-        "got request#{} from {:?}",
-        value,
-        req.remote_addr()
-    ))
+    LieResponse::with_html(format!("got request#{} from {:?}", value, addr.value()))
 }
 
-async fn not_found(req: RequestCtx) -> Response {
+async fn not_found(req: RequestParts) -> LieResponse {
     println!("handler not found for {}", req.uri().path());
-    Response::with_status(http::StatusCode::NOT_FOUND)
-}
-
-async fn handle_form_urlencoded(mut req: RequestCtx) -> Result<Response, Error> {
-    let form: serde_json::Value = req.read_form().await?;
-
-    println!("form=> {:?}", form);
-
-    Ok(Response::with_json(&form))
+    http::StatusCode::NOT_FOUND.into()
 }
 
 #[tokio::main]
@@ -70,20 +58,13 @@ async fn main() {
 
     app.register(http::Method::GET, "/", request_handler);
 
-    app.get("/hello", |_req| async move { "hello, world!" });
+    app.get("/hello", || async move { "hello, world!" });
 
-    app.get("/json", |_req| async move {
+    app.get("/json", || async move {
         let msg = HelloMessage {
             message: "hello, world!".to_owned(),
         };
-        lieweb::response::json(&msg)
-    });
-
-    app.post("/form-urlencoded", handle_form_urlencoded);
-
-    app.post("/posts/:id/edit", |req: RequestCtx| async move {
-        let id: u32 = req.get_param("id").unwrap();
-        format!("you are editing post<{}>", id)
+        LieResponse::with_json(msg)
     });
 
     app.handle_not_found(not_found);

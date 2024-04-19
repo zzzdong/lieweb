@@ -1,6 +1,5 @@
 #![allow(dead_code)]
 
-use std::convert::TryFrom;
 use std::future::Future;
 use std::pin::Pin;
 
