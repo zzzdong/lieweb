@@ -139,34 +139,33 @@ impl App {
     ) -> Result<(), Error> {
         let App { router } = self;
 
-        let router = Arc::new(router.finalize());
-
-        let server = Http::new();
+        let router = Arc::new(router);
 
         let tls_acceptor = crate::tls::new_tls_acceptor(cert, key)?;
 
         let listener = TcpListener::bind(addr).await.unwrap();
         while let Ok((socket, remote_addr)) = listener.accept().await {
             let tls_acceptor = tls_acceptor.clone();
-            let server = server.clone();
             let router = router.clone();
 
             tokio::task::spawn(async move {
                 let tls_acceptor = tls_acceptor.clone();
+                let server = hyper_util::server::conn::auto::Builder::new(TokioExecutor::new());
                 let router = router.clone();
 
                 match tls_acceptor.accept(socket).await {
                     Ok(stream) => {
+                        let stream = TokioIo::new(stream);
                         let ret = server.serve_connection(
                             stream,
-                            service_fn(|req| {
+                            service_fn(|mut req| {
                                 let router = router.clone();
-                                let req = RequestCtx::new(req, Some(remote_addr));
+                                RequestCtx::init(&mut req, Some(remote_addr));
 
                                 async move {
                                     let endpoint = RouterEndpoint::new(router);
                                     let resp = endpoint.call(req).await;
-                                    Ok::<_, Error>(resp.into())
+                                    Ok::<_, Error>(resp)
                                 }
                             }),
                         );

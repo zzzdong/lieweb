@@ -34,6 +34,9 @@ pub enum Error {
     MissingCookie { name: String },
     #[error("missing header {name:?}")]
     MissingHeader { name: String },
+    #[cfg(feature = "tls")]
+    #[error("tls error")]
+    TlsError(#[from] tokio_rustls::rustls::Error),
 }
 
 impl<'a> From<&'a str> for Error {

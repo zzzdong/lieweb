@@ -648,6 +648,7 @@ mod params_de {
                 V2,
             }
 
+            #[allow(dead_code)]
             #[derive(Debug, serde::Deserialize)]
             struct PathParams {
                 version: Version,
